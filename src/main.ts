@@ -9,9 +9,19 @@ import {
   type Progression,
   type ReleaseKey,
 } from './game';
+import {
+  DEFAULT_SCRIPTURE,
+  findPassages,
+  loadPassages,
+  translations,
+  type ScriptureSettings,
+  type WaveUnit,
+} from './scripture';
+import type { WordSource } from './words';
 
 const SETTINGS_KEY = 'bible-type:settings';
 const MUTE_KEY = 'bible-type:muted';
+const SCRIPTURE_KEY = 'bible-type:scripture';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -32,6 +42,17 @@ const progression = $<HTMLSelectElement>('progression');
 const wpmGap = $<HTMLSelectElement>('wpmGap');
 const shofarRefund = $<HTMLInputElement>('shofarRefund');
 const muteBtn = $<HTMLButtonElement>('mute');
+const startBtn = $<HTMLButtonElement>('start');
+const passages = $<HTMLTextAreaElement>('passages');
+const passageStatus = $('passageStatus');
+const passageOptions = $('passageOptions');
+const translation = $<HTMLSelectElement>('translation');
+const unit = $<HTMLSelectElement>('unit');
+const unitWords = $<HTMLInputElement>('unitWords');
+const unitWordsRow = $('unitWordsRow');
+const order = $<HTMLSelectElement>('order');
+const keepTogether = $<HTMLInputElement>('keepTogether');
+const keepTogetherRow = $('keepTogetherRow');
 const best = $('best');
 const stats = $('stats');
 
@@ -113,6 +134,71 @@ function loadSettings(): GameSettings {
   }
 }
 
+function readScripture(): ScriptureSettings {
+  return {
+    passages: passages.value,
+    translation: translation.value || DEFAULT_SCRIPTURE.translation,
+    unit: unit.value as WaveUnit,
+    words: Math.min(200, Math.max(3, Math.round(Number(unitWords.value)) || DEFAULT_SCRIPTURE.words)),
+    shuffle: order.value === 'shuffled',
+    keepTogether: keepTogether.checked,
+  };
+}
+
+function applyScripture(s: ScriptureSettings) {
+  passages.value = s.passages;
+  translation.value = s.translation;
+  unit.value = s.unit;
+  unitWords.value = String(s.words);
+  order.value = s.shuffle ? 'shuffled' : 'ordered';
+  keepTogether.checked = s.keepTogether;
+  if (!unit.value) unit.value = DEFAULT_SCRIPTURE.unit;
+}
+
+function loadScripture(): ScriptureSettings {
+  try {
+    return { ...DEFAULT_SCRIPTURE, ...JSON.parse(load(SCRIPTURE_KEY) ?? '{}') };
+  } catch {
+    return DEFAULT_SCRIPTURE;
+  }
+}
+
+function syncScriptureUi() {
+  const none = !passages.value.trim();
+  passageOptions.classList.toggle('disabled', none);
+  for (const el of [translation, unit, unitWords, order]) el.disabled = none;
+  unitWordsRow.classList.toggle('hidden', unit.value !== 'words');
+  const together = none || order.value !== 'shuffled';
+  keepTogether.disabled = together;
+  keepTogetherRow.classList.toggle('disabled', together);
+}
+
+function setStatus(text: string, error = false) {
+  passageStatus.textContent = text;
+  passageStatus.classList.toggle('error', error);
+}
+
+/** Show which references were understood as the player types them. */
+let previewTimer = 0;
+let previewRun = 0;
+function previewPassages() {
+  clearTimeout(previewTimer);
+  const input = passages.value;
+  if (!input.trim()) return setStatus('');
+  const run = ++previewRun;
+  previewTimer = window.setTimeout(async () => {
+    try {
+      const found = await findPassages(input);
+      if (run !== previewRun) return;
+      const unknown = found.unrecognized.length ? `Not a reference: ${found.unrecognized.join(', ')}` : '';
+      if (!found.references.length) return setStatus(unknown || 'No Bible references found.', true);
+      setStatus([found.references.join(' · '), unknown].filter(Boolean).join(' — '), !!unknown);
+    } catch (e) {
+      if (run === previewRun) setStatus(`Couldn’t read references: ${e}`, true);
+    }
+  }, 250);
+}
+
 function syncSettingsUi() {
   speedVal.textContent = speed.value;
   const key = releaseKey.value;
@@ -122,10 +208,32 @@ function syncSettingsUi() {
   releaseHint.innerHTML = `<kbd>${key}</kbd> releases your target so you can attack another.`;
 }
 
-function start() {
+let starting = false;
+async function start() {
+  if (starting) return;
+  const scripture = readScripture();
+  let source: WordSource | undefined;
+  if (scripture.passages.trim()) {
+    starting = true;
+    startBtn.disabled = true;
+    startBtn.textContent = 'Unrolling the scroll…';
+    try {
+      source = await loadPassages(scripture);
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e), true);
+      refreshMenu();
+      show(menu);
+      passages.focus();
+      return;
+    } finally {
+      starting = false;
+      startBtn.disabled = false;
+      startBtn.textContent = 'Begin';
+    }
+  }
   show(null);
   (document.activeElement as HTMLElement | null)?.blur();
-  game.start(readSettings());
+  game.start(readSettings(), source);
 }
 
 function toMenu() {
@@ -160,6 +268,23 @@ function showGameOver(s: GameStats) {
 
 applySettings(loadSettings());
 syncSettingsUi();
+applyScripture(loadScripture());
+syncScriptureUi();
+previewPassages();
+void translations().then((list) => {
+  const saved = loadScripture().translation;
+  translation.replaceChildren(
+    ...list.map((t) => new Option(`${t.abbreviation} — ${t.name}`, t.id, false, t.id === saved)),
+  );
+  if (!list.length) translation.append(new Option('None installed', ''));
+});
+for (const el of [passages, translation, unit, unitWords, order, keepTogether]) {
+  el.addEventListener('input', () => {
+    syncScriptureUi();
+    if (el === passages) previewPassages();
+    save(SCRIPTURE_KEY, JSON.stringify(readScripture()));
+  });
+}
 for (const el of [speed, progression, caps, punct, shofarRefund, mistake, releaseKey, releaseMode, giantSpace, wpmGap]) {
   el.addEventListener('input', () => {
     syncSettingsUi();

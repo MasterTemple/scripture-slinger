@@ -37,6 +37,47 @@
         </div>
 
         <fieldset class="settings">
+          <legend>Scripture</legend>
+          <textarea
+            id="passages"
+            rows="2"
+            spellcheck="false"
+            aria-describedby="passageStatus"
+            placeholder="Leave empty for random Bible words, or name passages: John 1:1-14; Psalm 23; Romans 8:28-39"
+          ></textarea>
+          <p id="passageStatus" class="status" aria-live="polite"></p>
+          <div class="passage-options" id="passageOptions">
+            <div class="row">
+              <label for="translation">Translation</label>
+              <select id="translation"></select>
+            </div>
+            <div class="row">
+              <label for="unit">Each wave is</label>
+              <select id="unit">
+                <option value="verse">A verse</option>
+                <option value="paragraph">A paragraph</option>
+                <option value="words">A number of words</option>
+              </select>
+            </div>
+            <div class="row" id="unitWordsRow">
+              <label for="unitWords">Words per wave</label>
+              <input type="number" id="unitWords" min="3" max="200" step="1" />
+            </div>
+            <div class="row">
+              <label for="order">Passages come</label>
+              <select id="order">
+                <option value="ordered">In the order given</option>
+                <option value="shuffled">Shuffled</option>
+              </select>
+            </div>
+            <label class="toggle" id="keepTogetherRow">
+              <input type="checkbox" id="keepTogether" />
+              <span>Keep each passage together <small>John 1:1-3 comes as one run, in order</small></span>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="settings">
           <legend>Rules</legend>
           <label class="toggle">
             <input type="checkbox" id="caps" />

@@ -342,3 +342,54 @@ select:focus-visible,
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+textarea,
+input[type="number"] {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #1a1030;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+textarea {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  resize: vertical;
+  line-height: 1.35;
+}
+
+textarea::placeholder {
+  color: var(--muted);
+  font-style: italic;
+  opacity: 0.8;
+}
+
+input[type="number"] {
+  width: 6em;
+  padding: 5px 8px;
+}
+
+textarea:focus-visible,
+input[type="number"]:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+
+.status {
+  min-height: 1.4em;
+  margin: 6px 0 4px;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.status.error {
+  color: #ff8a80;
+}
+
+.passage-options.disabled,
+.toggle.disabled {
+  opacity: 0.45;
+}

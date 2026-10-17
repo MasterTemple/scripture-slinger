@@ -685,6 +685,8 @@ export interface Hud {
   startLives: number;
   maxLives: number;
   shofars: number;
+  /** The passage being typed, if any. */
+  passage: string | null;
 }
 
 function heart(g: CanvasRenderingContext2D, x: number, y: number, s: number) {
@@ -759,6 +761,12 @@ export function drawHud(g: CanvasRenderingContext2D, w: number, h: number, s: Hu
   g.font = `700 14px ${MONO}`;
   g.fillText(`${Math.round(s.wpm)} wpm · ${Math.round(s.accuracy * 100)}%`, w - pad, pad + 48);
 
+  if (s.passage) {
+    g.fillStyle = 'rgba(242, 193, 78, 0.75)';
+    g.font = `500 13px ${SERIF}`;
+    g.fillText(s.passage.toUpperCase(), w - pad, pad + 70);
+  }
+
   for (let i = 0; i < s.maxLives; i++) {
     const x = pad + 12 + i * 28;
     if (i < s.startLives) {
@@ -787,6 +795,8 @@ export interface Banner {
   ref: string;
 }
 
+const BANNER_LINES = 6;
+
 export function drawBanner(g: CanvasRenderingContext2D, w: number, h: number, banner: Banner, alpha: number) {
   const { title, notes, text, ref } = banner;
   g.save();
@@ -804,10 +814,16 @@ export function drawBanner(g: CanvasRenderingContext2D, w: number, h: number, ba
   g.shadowBlur = 0;
   g.fillStyle = 'rgba(244, 239, 230, 0.9)';
   g.font = `italic 22px ${BOOK}`;
-  wrap(g, `“${text}”`, w / 2, h * 0.36 + 50, Math.min(w - 40, 640), 28);
+  const shown = lines(g, `“${text}”`, Math.min(w - 40, 640));
+  // A long passage shows its opening; its words all come as enemies anyway.
+  if (shown.length > BANNER_LINES) {
+    shown.length = BANNER_LINES;
+    shown[BANNER_LINES - 1] += '…';
+  }
+  shown.forEach((l, i) => g.fillText(l, w / 2, h * 0.36 + 50 + i * 28));
   g.fillStyle = 'rgba(242, 193, 78, 0.75)';
   g.font = `500 13px ${SERIF}`;
-  g.fillText(ref.toUpperCase(), w / 2, h * 0.36 + 50 + 28 * lineCount(g, `“${text}”`, Math.min(w - 40, 640), BOOK) + 6);
+  g.fillText(ref.toUpperCase(), w / 2, h * 0.36 + 50 + 28 * shown.length + 6);
   g.restore();
 }
 
@@ -823,16 +839,4 @@ function lines(g: CanvasRenderingContext2D, text: string, maxW: number): string[
   }
   if (line) out.push(line);
   return out;
-}
-
-function lineCount(g: CanvasRenderingContext2D, text: string, maxW: number, font: string) {
-  g.save();
-  g.font = `italic 22px ${font}`;
-  const n = lines(g, text, maxW).length;
-  g.restore();
-  return n;
-}
-
-function wrap(g: CanvasRenderingContext2D, text: string, x: number, y: number, maxW: number, lh: number) {
-  lines(g, text, maxW).forEach((l, i) => g.fillText(l, x, y + i * lh));
 }

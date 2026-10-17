@@ -20,7 +20,22 @@ export interface WordRequest {
   accept(word: string): boolean;
 }
 
+/** What a source decides about a wave; anything it leaves out follows the game's difficulty curve. */
+export interface WavePlan {
+  /** Shown on the wave's banner, and its reference during the wave. */
+  verse: Verse;
+  /** How many regular (non-boss) enemies the wave has. */
+  size: number;
+  /** How many regular enemies come before the boss (when the wave has one). */
+  bossAt: number;
+}
+
 export interface WordSource {
+  /**
+   * Called as each wave begins. A source that walks through a passage plans the
+   * wave from its text; return null (or leave it out) for the game's own plan.
+   */
+  startWave?(boss: boolean): WavePlan | null;
   /** Return a word (or phrase), or null if nothing fits right now. */
   next(req: WordRequest): string | null;
 }

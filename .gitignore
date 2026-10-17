@@ -1,2 +1,4 @@
 node_modules
 dist
+# Bible texts are under copyright; each install supplies its own.
+public/bibles/

@@ -8,8 +8,12 @@
   },
   "type": "module",
   "devDependencies": {
+    "@types/node": "^26.6.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.4"
   },
-  "private": true
+  "private": true,
+  "dependencies": {
+    "logoxide": "file:../../rust/logoxide/crates/logoxide-ffi/dist/wasm/pkg"
+  }
 }

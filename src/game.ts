@@ -105,6 +105,11 @@ export class Game {
   private waveSize = 0;
   private spawnTimer = 0;
   private bossQueued = false;
+  /** Regular enemies spawned before the boss comes. */
+  private bossAt = 0;
+  /** The passage being typed this wave, shown in the HUD; null for random words. */
+  private waveRef: string | null = null;
+  private source: WordSource = new DefaultWordSource();
   private banner: draw.Banner & { t: number } = { title: '', notes: [], text: '', ref: '', t: 0 };
   /** Typos made during the current wave; a wave with none earns a life. */
   private waveTypos = 0;
@@ -135,7 +140,6 @@ export class Game {
     private readonly canvas: HTMLCanvasElement,
     private readonly audio: AudioFX,
     private readonly cb: GameCallbacks,
-    private readonly source: WordSource = new DefaultWordSource(),
   ) {
     this.ctx = canvas.getContext('2d')!;
     this.resize();
@@ -159,8 +163,9 @@ export class Game {
   // Lifecycle
   // -------------------------------------------------------------------------
 
-  start(settings: GameSettings) {
+  start(settings: GameSettings, source: WordSource = new DefaultWordSource()) {
     this.settings = { ...settings };
+    this.source = source;
     this.enemies = [];
     this.projectiles = [];
     this.particles = [];
@@ -238,11 +243,14 @@ export class Game {
     this.waveTypos = 0;
     this.wave++;
     this.waveTime = 0;
-    this.waveSize = Math.min(Math.round(Math.min(6 + this.wave * 2, 40) * this.crowd()), 100);
-    this.toSpawn = this.waveSize;
     this.bossQueued = this.wave % 5 === 0;
+    const plan = this.source.startWave?.(this.bossQueued) ?? null;
+    this.waveSize = plan?.size ?? Math.min(Math.round(Math.min(6 + this.wave * 2, 40) * this.crowd()), 100);
+    this.toSpawn = this.waveSize;
+    this.bossAt = plan?.bossAt ?? Math.ceil(this.waveSize / 2);
     this.spawnTimer = 0;
-    const verse = randomVerse();
+    const verse = plan?.verse ?? randomVerse();
+    this.waveRef = plan ? verse.ref : null;
     if (this.wave > 1 && (this.wave - 1) % 3 === 0 && this.shofars < MAX_SHOFARS) {
       this.shofars++;
       notes.push('+1 Shofar');
@@ -526,12 +534,13 @@ export class Game {
     } else {
       this.waveTime += dt;
       this.spawnTimer -= dt;
-      if (this.toSpawn > 0 && this.spawnTimer <= 0) {
+      // Once the boss is due, it comes before any more regular enemies, so a passage stays in order.
+      const bossDue = this.bossQueued && this.waveSize - this.toSpawn >= this.bossAt;
+      if (bossDue) {
+        if (this.spawn('goliath')) this.bossQueued = false;
+      } else if (this.toSpawn > 0 && this.spawnTimer <= 0) {
         if (this.spawn()) this.toSpawn--;
         this.spawnTimer = this.spawnInterval() * (0.7 + Math.random() * 0.6);
-      }
-      if (this.bossQueued && this.toSpawn <= Math.floor(this.waveSize / 2)) {
-        if (this.spawn('goliath')) this.bossQueued = false;
       }
       if (this.toSpawn === 0 && !this.bossQueued && this.enemies.length === 0) this.nextWave();
     }
@@ -725,6 +734,7 @@ export class Game {
         startLives: START_LIVES,
         maxLives: MAX_LIVES,
         shofars: this.shofars,
+        passage: this.waveRef,
       });
       if (this.banner.t > 0) {
         const t = this.banner.t;
