@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bible Type</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=JetBrains+Mono:wght@500;700&family=EB+Garamond:ital@0;1&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <canvas id="game"></canvas>
+
+    <div id="menu" class="overlay">
+      <div class="panel">
+        <h1>Bible Type</h1>
+        <p class="verse">
+          “And take the helmet of salvation, and the sword of the Spirit, which is the word of God.”
+          <span>Ephesians 6:17</span>
+        </p>
+
+        <div class="field">
+          <label for="speed">Starting speed <output id="speedVal">4</output></label>
+          <input type="range" id="speed" min="1" max="20" step="1" value="4" />
+          <div class="range-hints"><span>Still waters</span><span>Fiery furnace</span></div>
+        </div>
+
+        <div class="field row-field">
+          <label for="progression">As the waves go on</label>
+          <select id="progression">
+            <option value="faster">Enemies get faster</option>
+            <option value="swarm">More enemies, gentler speed-up</option>
+          </select>
+        </div>
+
+        <fieldset class="settings">
+          <legend>Rules</legend>
+          <label class="toggle">
+            <input type="checkbox" id="caps" />
+            <span>Capitalization <small>Match upper- and lowercase</small></span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="punct" />
+            <span>Punctuation <small>Type commas, periods, apostrophes…</small></span>
+          </label>
+          <label class="toggle">
+            <input type="checkbox" id="shofarRefund" />
+            <span>Forgiving shofar <small>Kept if there’s nothing to defeat</small></span>
+          </label>
+          <div class="row">
+            <label for="mistake">On a wrong key</label>
+            <select id="mistake">
+              <option value="continue">Keep going</option>
+              <option value="restart">Restart the word, stay locked</option>
+              <option value="release">Restart the word and release it</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="releaseKey">Release target with</label>
+            <select id="releaseKey">
+              <option value="off">Off</option>
+              <option value="Space">Space</option>
+              <option value="Tab">Tab</option>
+              <option value="Backspace">Backspace</option>
+            </select>
+          </div>
+          <div class="row" id="releaseModeRow">
+            <label for="releaseMode">A released word</label>
+            <select id="releaseMode">
+              <option value="keep">Keeps its progress</option>
+              <option value="reset">Starts over</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="giantSpace">A space in a giant’s phrase</label>
+            <select id="giantSpace">
+              <option value="stay">Keeps you locked on</option>
+              <option value="release">Releases the giant</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="wpmGap">Pause between words counted in WPM</label>
+            <select id="wpmGap">
+              <option value="0">None</option>
+              <option value="0.25">Up to 0.25s</option>
+              <option value="0.5">Up to 0.5s</option>
+              <option value="1">Up to 1s</option>
+              <option value="2">Up to 2s</option>
+              <option value="5">Up to 5s</option>
+            </select>
+          </div>
+        </fieldset>
+
+        <button id="start" class="primary">Begin</button>
+
+        <ul class="how">
+          <li>Type the word on an enemy to lock on — every letter hurls a stone.</li>
+          <li>Once locked, you must finish that word.</li>
+          <li><kbd>Enter</kbd> sounds the shofar and brings the walls down.</li>
+          <li>Clear a wave without a typo to earn a life — up to three extra shields.</li>
+          <li id="releaseHint" class="hidden"></li>
+          <li><kbd>Esc</kbd> pauses. Each wave is harder than the last.</li>
+        </ul>
+
+        <div class="menu-footer">
+          <span id="best"></span>
+          <button id="mute" class="link"></button>
+        </div>
+      </div>
+    </div>
+
+    <div id="pause" class="overlay hidden">
+      <div class="panel small">
+        <h2>Selah</h2>
+        <p class="muted">Pause, and calmly think on that.</p>
+        <button id="resume" class="primary">Resume</button>
+        <button id="quit" class="link">Return to menu</button>
+      </div>
+    </div>
+
+    <div id="over" class="overlay hidden">
+      <div class="panel">
+        <h2>The battle is over</h2>
+        <p class="verse">
+          “I have fought a good fight, I have finished my course, I have kept the faith.”
+          <span>2 Timothy 4:7</span>
+        </p>
+        <dl id="stats" class="stats"></dl>
+        <button id="again" class="primary">Fight again</button>
+        <button id="toMenu" class="link">Return to menu</button>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
