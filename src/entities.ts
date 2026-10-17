@@ -8,6 +8,11 @@ export interface Enemy {
   /** Normalized characters the player must type; same length as `chars`. */
   target: string[];
   typed: number;
+  /** Words still to come after the one shown (a giant's phrase). */
+  queue: { chars: string[]; target: string[] }[];
+  /** Letters in all of the enemy's words, and how many of them are already typed; a giant's health. */
+  total: number;
+  spent: number;
   x: number;
   y: number;
   angle: number;

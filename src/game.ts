@@ -35,8 +35,6 @@ export interface GameSettings {
   releaseKey: ReleaseKey;
   /** Whether a released word goes back to its first letter. */
   releaseResets: boolean;
-  /** Typing a space in a giant's phrase releases it (keeping progress) so you can attack others. */
-  giantSpaceReleases: boolean;
   progression: Progression;
   /** Longest pause between words (seconds) that still counts toward WPM. */
   wpmGap: number;
@@ -51,7 +49,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
   onMistake: 'continue',
   releaseKey: 'off',
   releaseResets: false,
-  giantSpaceReleases: false,
   progression: 'faster',
   wpmGap: 0,
   shofarRefund: true,
@@ -73,6 +70,8 @@ const MAX_SHOFARS = 3;
 const STONE_SPEED = 1500;
 const BANNER_TIME = 3.2;
 const BEST_KEY = 'bible-type:best';
+/** → skips the rest of a wave; for testing, e.g. to reach a giant wave quickly. */
+const SKIP_KEY = false;
 
 /** Speed setting 1–20 → base enemy speed in px/s at a 900px-tall screen. */
 const baseSpeedFor = (setting: number) => 12 + setting * 8;
@@ -280,6 +279,11 @@ export class Game {
       this.blowShofar();
       return;
     }
+    if (SKIP_KEY && e.key === 'ArrowRight') {
+      e.preventDefault();
+      this.skipWave();
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     if (this.isReleaseKey(e)) {
       e.preventDefault();
@@ -292,14 +296,18 @@ export class Game {
     this.type(this.settings.caseSensitive ? ch : ch.toLowerCase());
   }
 
+  /** Clear the wave without a fight (no points, and it doesn't count as flawless) and start the next. */
+  private skipWave() {
+    this.enemies = [];
+    this.projectiles = [];
+    this.lockId = null;
+    this.waveTypos++;
+    this.nextWave();
+  }
+
   private isReleaseKey(e: KeyboardEvent): boolean {
     const key = this.settings.releaseKey;
-    if (key === 'off') return false;
-    if (key !== 'Space') return e.key === key;
-    if (e.key !== ' ') return false;
-    // Space still types the space inside a phrase when that's the next letter.
-    const t = this.locked();
-    return !t || t.target[t.typed] !== ' ';
+    return key !== 'off' && e.key === (key === 'Space' ? ' ' : key);
   }
 
   private release() {
@@ -344,12 +352,22 @@ export class Game {
     this.fire(target);
 
     if (target.typed === target.target.length) {
-      target.doomed = true;
-      target.reward = Math.round(target.target.length * 10 * this.multiplier() * (target.kind === 'goliath' ? 3 : 1));
+      const reward = Math.round(target.target.length * 10 * this.multiplier() * (target.kind === 'goliath' ? 3 : 1));
       this.wordsDone++;
       this.lockId = null;
-    } else if (ch === ' ' && target.kind === 'goliath' && this.settings.giantSpaceReleases) {
-      this.lockId = null;
+      target.spent += target.target.length;
+      const next = target.queue.shift();
+      if (next) {
+        // Each word of a giant's phrase is a blow; the next word is a fresh target.
+        target.chars = next.chars;
+        target.target = next.target;
+        target.typed = 0;
+        this.score += reward;
+        this.texts.push({ x: target.x, y: target.y, text: `+${reward}`, life: 1, color: draw.GOLD });
+      } else {
+        target.doomed = true;
+        target.reward = reward;
+      }
     }
   }
 
@@ -464,19 +482,28 @@ export class Game {
     });
     if (!word) return false;
 
-    const chars = toTypeable(word, opts);
-    const target = chars.map(normalizeChar);
-    if (!target.length) return false;
-    const len = target.length;
+    // A giant's phrase is shown one word at a time.
+    const words = word
+      .split(/\s+/)
+      .map((w) => toTypeable(w, opts))
+      .filter((chars) => chars.length)
+      .map((chars) => ({ chars, target: chars.map(normalizeChar) }));
+    const first = words.shift();
+    if (!first) return false;
+    const total = words.reduce((n, w) => n + w.target.length, first.target.length);
+    const len = first.target.length;
     const k: EnemyKind = kind ?? (len <= 4 ? 'locust' : len <= 7 ? 'raven' : 'serpent');
     const spec = KINDS[k];
     const margin = Math.min(80, this.w * 0.1);
     this.enemies.push({
       id: this.nextId++,
       kind: k,
-      chars,
-      target,
+      chars: first.chars,
+      target: first.target,
       typed: 0,
+      queue: words,
+      total,
+      spent: 0,
       x: boss ? this.w / 2 : margin + Math.random() * (this.w - margin * 2),
       y: -spec.radius - 10,
       angle: Math.PI / 2,

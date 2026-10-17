@@ -37,7 +37,6 @@ const releaseKey = $<HTMLSelectElement>('releaseKey');
 const releaseMode = $<HTMLSelectElement>('releaseMode');
 const releaseModeRow = $('releaseModeRow');
 const releaseHint = $('releaseHint');
-const giantSpace = $<HTMLSelectElement>('giantSpace');
 const progression = $<HTMLSelectElement>('progression');
 const wpmGap = $<HTMLSelectElement>('wpmGap');
 const shofarRefund = $<HTMLInputElement>('shofarRefund');
@@ -117,7 +116,6 @@ function readSettings(): GameSettings {
     onMistake: mistake.value as MistakeRule,
     releaseKey: releaseKey.value as ReleaseKey,
     releaseResets: releaseMode.value === 'reset',
-    giantSpaceReleases: giantSpace.value === 'release',
     progression: progression.value as Progression,
     wpmGap: Number(wpmGap.value),
     shofarRefund: shofarRefund.checked,
@@ -131,7 +129,6 @@ function applySettings(s: GameSettings) {
   mistake.value = s.onMistake;
   releaseKey.value = s.releaseKey;
   releaseMode.value = s.releaseResets ? 'reset' : 'keep';
-  giantSpace.value = s.giantSpaceReleases ? 'release' : 'stay';
   progression.value = s.progression;
   wpmGap.value = String(s.wpmGap);
   shofarRefund.checked = s.shofarRefund;
@@ -299,7 +296,7 @@ for (const el of [passages, translation, unit, unitWords, order, keepTogether]) 
     save(SCRIPTURE_KEY, JSON.stringify(readScripture()));
   });
 }
-for (const el of [speed, progression, caps, punct, shofarRefund, mistake, releaseKey, releaseMode, giantSpace, wpmGap]) {
+for (const el of [speed, progression, caps, punct, shofarRefund, mistake, releaseKey, releaseMode, wpmGap]) {
   el.addEventListener('input', () => {
     syncSettingsUi();
     save(SETTINGS_KEY, JSON.stringify(readSettings()));

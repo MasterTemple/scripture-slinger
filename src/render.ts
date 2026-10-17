@@ -532,6 +532,7 @@ export function drawEnemy(g: CanvasRenderingContext2D, e: Enemy) {
   else if (e.kind === 'serpent') drawSerpent(g, e);
   else drawGoliath(g, e);
   g.restore();
+  if (e.kind === 'goliath') drawHealth(g, e);
 
   if (e.flash > 0) {
     g.save();
@@ -542,6 +543,37 @@ export function drawEnemy(g: CanvasRenderingContext2D, e: Enemy) {
     g.fill();
     g.restore();
   }
+}
+
+/** A giant's health: how much of its phrase is left to type. */
+function drawHealth(g: CanvasRenderingContext2D, e: Enemy) {
+  const left = 1 - (e.spent + e.typed) / e.total;
+  const w = 96;
+  const h = 8;
+  const x = e.x - w / 2;
+  // Under the word, which stays on screen while the giant comes in from the top.
+  const y = Math.max(labelY(e), 20) + 22;
+  g.save();
+  g.fillStyle = 'rgba(10, 6, 22, 0.8)';
+  g.strokeStyle = 'rgba(242, 193, 78, 0.6)';
+  g.lineWidth = 1;
+  g.beginPath();
+  g.roundRect(x - 2, y - 2, w + 4, h + 4, 4);
+  g.fill();
+  g.stroke();
+  // Gold when fresh, red when nearly down.
+  g.fillStyle = left > 0.5 ? GOLD : left > 0.25 ? '#ff9a3c' : '#e5484d';
+  g.beginPath();
+  g.roundRect(x, y, w * left, h, 3);
+  g.fill();
+  // A notch where each word of the phrase ends.
+  g.fillStyle = 'rgba(10, 6, 22, 0.9)';
+  let at = e.spent + e.target.length;
+  for (const word of e.queue) {
+    g.fillRect(x + (w * (e.total - at)) / e.total - 0.5, y, 1, h);
+    at += word.target.length;
+  }
+  g.restore();
 }
 
 export function drawReticle(g: CanvasRenderingContext2D, e: Enemy, t: number) {
