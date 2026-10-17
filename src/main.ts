@@ -85,8 +85,23 @@ if (import.meta.env.DEV) Object.assign(window, { game });
 
 function show(el: HTMLElement | null) {
   for (const o of [menu, pauseEl, over]) o.classList.toggle('hidden', o !== el);
-  el?.querySelector<HTMLButtonElement>('button.primary')?.focus();
+  if (el) el.querySelector<HTMLButtonElement>('button.primary')?.focus();
+  // A hidden button keeping focus would still take Enter and Space.
+  else (document.activeElement as HTMLElement | null)?.blur();
 }
+
+// On the pause and game-over panels, Tab cycles their buttons rather than leaving the page.
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const open = [pauseEl, over].find((o) => !o.classList.contains('hidden'));
+  if (!open) return;
+  const items = [...open.querySelectorAll<HTMLElement>('button:not(:disabled)')];
+  if (!items.length) return;
+  e.preventDefault();
+  const i = items.indexOf(document.activeElement as HTMLElement);
+  const step = e.shiftKey ? -1 : 1;
+  items[i < 0 ? (e.shiftKey ? items.length - 1 : 0) : (i + step + items.length) % items.length].focus();
+});
 
 function refreshMenu() {
   const b = Game.bestScore();
@@ -232,7 +247,6 @@ async function start() {
     }
   }
   show(null);
-  (document.activeElement as HTMLElement | null)?.blur();
   game.start(readSettings(), source);
 }
 

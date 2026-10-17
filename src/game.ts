@@ -273,6 +273,8 @@ export class Game {
       return;
     }
     if (this.state !== 'playing') return;
+    // Tab would move focus out of the page (to the browser's toolbar), leaving the game unable to hear keys.
+    if (e.key === 'Tab') e.preventDefault();
     if (e.key === 'Enter') {
       e.preventDefault();
       this.blowShofar();
