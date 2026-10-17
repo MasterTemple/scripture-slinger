@@ -37,8 +37,9 @@ canvas {
   background: radial-gradient(ellipse at center, rgba(5, 6, 26, 0.35), rgba(5, 6, 26, 0.75));
 }
 
+/* Beats the display of more specific rules, like `.settings .row`. */
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .panel {
@@ -54,6 +55,76 @@ canvas {
 
 .panel.small {
   width: min(380px, 100%);
+}
+
+/* The menu's settings sit side by side so it fits without scrolling. */
+.panel.menu-panel {
+  width: min(1040px, 100%);
+}
+
+.menu-panel h1 {
+  margin-bottom: 6px;
+}
+
+.menu-panel .verse {
+  margin-bottom: 18px;
+}
+
+.menu-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 32px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.menu-column > :last-child {
+  margin-bottom: 0;
+}
+
+.menu-column .how {
+  margin-top: 0;
+}
+
+/* Short screens: a tighter menu, without the opening verse. */
+@media (max-height: 800px) and (min-width: 821px) {
+  .panel.menu-panel {
+    padding: 20px 32px;
+  }
+
+  .menu-panel h1 {
+    font-size: 2.4rem;
+  }
+
+  .menu-panel .verse {
+    display: none;
+  }
+
+  .menu-panel .field {
+    margin-bottom: 14px;
+  }
+
+  .menu-columns {
+    margin-bottom: 14px;
+  }
+
+  .menu-panel .settings .row {
+    padding: 3px 0;
+  }
+
+  .menu-panel .menu-footer {
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 820px) {
+  .menu-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .menu-column + .menu-column {
+    margin-top: 22px;
+  }
 }
 
 h1,
