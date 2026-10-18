@@ -337,9 +337,11 @@ export class Game {
     if (!target) {
       // A released word that kept its progress is picked up again by its next letter.
       const candidates = this.enemies.filter((e) => !e.doomed && e.target[e.typed] === ch);
-      if (!candidates.length) return this.miss(null);
       const dist = (e: Enemy) => Math.hypot(e.x - this.px(), e.y - this.py());
-      target = candidates.reduce((a, b) => (dist(b) < dist(a) ? b : a));
+      target = candidates.length ? candidates.reduce((a, b) => (dist(b) < dist(a) ? b : a)) : this.typeAhead(ch);
+      // No word starts with a space, so one between words (as when typing a verse from memory) isn't a miss.
+      if (!target && ch === ' ') return;
+      if (!target) return this.miss(null);
       this.lockId = target.id;
     }
 
@@ -514,29 +516,49 @@ export class Game {
    * more comes until that word is typed.
    */
   private spawnPlanned() {
-    const planned = this.planned!;
-    const item = planned[this.plannedAt];
+    const word = this.nextPlanned();
+    if (!word) return;
+    const item = this.planned![this.plannedAt];
     // The giant's word comes as soon as its turn does.
-    if (!item || (this.spawnTimer > 0 && !item.giant)) return;
-    const giant = this.enemies.find((e) => e.kind === 'goliath' && !e.doomed);
-    if (giant?.target.length) return;
-    const word = this.toWords(item.text)[0];
-    if (!word || (item.giant && this.giantCame && !giant)) {
-      this.plannedAt++;
-      return;
-    }
+    if (this.spawnTimer > 0 && !item.giant) return;
     if (!this.keyFree(word)) return;
     if (item.giant && this.enemies.some((e) => e.kind !== 'goliath' && !e.doomed)) return;
+    this.bringPlanned(word);
+  }
+
+  /**
+   * The passage's next word, if it can come now (not while the giant shows a word). Words
+   * that can no longer come (nothing to type, or the giant's once it's gone) are passed over.
+   */
+  private nextPlanned(): EnemyWord | null {
+    const planned = this.planned;
+    if (!planned || this.activeGiant()?.target.length) return null;
+    while (this.plannedAt < planned.length) {
+      const item = planned[this.plannedAt];
+      const word = this.toWords(item.text)[0];
+      if (word && !(item.giant && this.giantCame && !this.activeGiant())) return word;
+      this.plannedAt++;
+    }
+    return null;
+  }
+
+  /** Bring the passage's next word on screen (to its creature, or to the giant) and return its enemy. */
+  private bringPlanned(word: EnemyWord): Enemy {
+    const planned = this.planned!;
+    const item = planned[this.plannedAt];
+    const giant = this.activeGiant();
+    let enemy: Enemy;
     if (!item.giant) {
-      this.addEnemy(word, [], undefined, true);
+      enemy = this.addEnemy(word, [], undefined, true);
     } else if (giant) {
+      enemy = giant;
       giant.chars = word.chars;
       giant.target = word.target;
       giant.queue.shift();
     } else {
       const rest = planned.slice(this.plannedAt + 1).filter((w) => w.giant);
       const queue = rest.map((w) => this.toWords(w.text)[0]).filter((w) => w !== undefined);
-      const enemy = this.addEnemy(word, queue, 'goliath', false);
+      enemy = this.addEnemy(word, queue, 'goliath', false);
       enemy.waitsTurn = true;
       // Paced like the creatures his words would have been: one's journey, plus a spawn's
       // wait for each word.
@@ -547,6 +569,21 @@ export class Game {
     }
     this.plannedAt++;
     this.spawnTimer = this.spawnInterval() * (0.7 + Math.random() * 0.6);
+    return enemy;
+  }
+
+  /**
+   * Typing ahead in a passage: a key no enemy on screen is waiting for, but that starts the
+   * passage's next word, brings that word now, so a player who knows the verse isn't held
+   * back (or charged a miss) by when it would have come.
+   */
+  private typeAhead(ch: string): Enemy | null {
+    const word = this.nextPlanned();
+    return word?.target[0] === ch ? this.bringPlanned(word) : null;
+  }
+
+  private activeGiant(): Enemy | undefined {
+    return this.enemies.find((e) => e.kind === 'goliath' && !e.doomed);
   }
 
   /**
