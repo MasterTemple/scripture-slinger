@@ -15,5 +15,6 @@
   "private": true,
   "dependencies": {
     "logoxide": "file:../../rust/logoxide/crates/logoxide-ffi/dist/wasm/pkg"
-  }
+  },
+  "license": "CC0-1.0"
 }

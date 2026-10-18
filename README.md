@@ -72,3 +72,7 @@ interface WordSource {
 ```
 
 Pass your own implementation to `game.start(settings, source)` in `src/main.ts`. Return text exactly as written, with its capitals and punctuation. `toTypeable` strips or lowercases it to match the player's settings, and `normalizeChar` maps curly quotes and dashes to plain keys. Call `req.accept(word)` to skip words whose first key is already taken on screen, so every enemy can be locked onto without ambiguity. A source that plans its own waves (like `PassageSource` in `src/scripture.ts`) implements `startWave` instead, returning the banner verse and the wave's words in the order they should be typed, with the giant's marked; the game keeps them in that order.
+
+## License
+
+Scripture Slinger is dedicated to the public domain under [CC0 1.0](LICENSE).
