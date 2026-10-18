@@ -542,14 +542,20 @@ export class Game {
     return null;
   }
 
-  /** Bring the passage's next word on screen (to its creature, or to the giant) and return its enemy. */
-  private bringPlanned(word: EnemyWord): Enemy {
+  /**
+   * Bring the passage's next word on screen (to its creature, or to the giant) and return its
+   * enemy. `early` is how long before its time it comes (typed ahead): its creature moves
+   * slower to reach David when it would have, and the words after it keep their times.
+   */
+  private bringPlanned(word: EnemyWord, early = 0): Enemy {
     const planned = this.planned!;
     const item = planned[this.plannedAt];
     const giant = this.activeGiant();
     let enemy: Enemy;
     if (!item.giant) {
       enemy = this.addEnemy(word, [], undefined, true);
+      const journey = (this.py() - enemy.y - enemy.radius - 24) / this.enemySpeed();
+      enemy.speed *= journey / (journey + early);
     } else if (giant) {
       enemy = giant;
       giant.chars = word.chars;
@@ -568,18 +574,21 @@ export class Game {
       this.giantCame = true;
     }
     this.plannedAt++;
-    this.spawnTimer = this.spawnInterval() * (0.7 + Math.random() * 0.6);
+    const wait = this.spawnInterval() * (0.7 + Math.random() * 0.6);
+    this.spawnTimer = early > 0 ? Math.max(0, this.spawnTimer) + wait : wait;
     return enemy;
   }
 
   /**
    * Typing ahead in a passage: a key no enemy on screen is waiting for, but that starts the
-   * passage's next word, brings that word now, so a player who knows the verse isn't held
-   * back (or charged a miss) by when it would have come.
+   * passage's next word, brings that word now (rather than a miss), though it still reaches
+   * David no sooner than it would have, so knowing the verse buys time rather than costing it.
    */
   private typeAhead(ch: string): Enemy | null {
     const word = this.nextPlanned();
-    return word?.target[0] === ch ? this.bringPlanned(word) : null;
+    if (word?.target[0] !== ch) return null;
+    // It would have come once the wave's banner and the spawn wait were over.
+    return this.bringPlanned(word, Math.max(0, this.banner.t) + Math.max(0, this.spawnTimer));
   }
 
   private activeGiant(): Enemy | undefined {
