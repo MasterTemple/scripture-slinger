@@ -1,9 +1,9 @@
-# Builds the game and publishes it to GitHub Pages on every push to master.
+# Builds the game and publishes it to GitHub Pages on every push to main.
 name: Pages
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   workflow_dispatch:
 
 permissions:

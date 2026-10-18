@@ -11,7 +11,7 @@ npm run build    # type-check + production build into dist/, for /scripture-slin
 npm run preview  # the build, at http://localhost:4173/scripture-slinger/
 ```
 
-Every push to `master` is built and published to GitHub Pages by `.github/workflows/pages.yml` (the repository's **Settings → Pages → Source** is **GitHub Actions**). The build's `base` in `vite.config.ts` is `/scripture-slinger/`, the repository's name; `npm run dev` serves from `/`.
+Every push to `main` is built and published to GitHub Pages by `.github/workflows/pages.yml` (the repository's **Settings → Pages → Source** is **GitHub Actions**). The build's `base` in `vite.config.ts` is `/scripture-slinger/`, the repository's name; `npm run dev` serves from `/`.
 
 ## How it plays
 
