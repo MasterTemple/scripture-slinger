@@ -1,6 +1,17 @@
 import './style.css';
 import { AudioFX } from './audio';
 import {
+  canKeepBooks,
+  forget,
+  keptBooks,
+  localId,
+  saveLocalBooks,
+  translations,
+  type BookFile,
+  type StoredBook,
+  type Translation,
+} from './bibles';
+import {
   DEFAULT_SETTINGS,
   Game,
   type GameSettings,
@@ -12,8 +23,10 @@ import {
 import {
   DEFAULT_SCRIPTURE,
   findPassages,
+  bookNames,
+  forgetBooks,
   loadPassages,
-  translations,
+  readBookFiles,
   type ScriptureSettings,
   type WaveUnit,
 } from './scripture';
@@ -27,6 +40,15 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 
 const menu = $('menu');
 const pauseEl = $('pause');
+const bibles = $('bibles');
+const bibleList = $('bibleList');
+const addBible = $<HTMLFormElement>('addBible');
+const bibleAbbrev = $<HTMLInputElement>('bibleAbbrev');
+const bibleName = $<HTMLInputElement>('bibleName');
+const bibleFiles = $<HTMLInputElement>('bibleFiles');
+const myBibles = $<HTMLDataListElement>('myBibles');
+const addBooks = $<HTMLButtonElement>('addBooks');
+const addStatus = $('addStatus');
 const over = $('over');
 const speed = $<HTMLInputElement>('speed');
 const speedVal = $<HTMLOutputElement>('speedVal');
@@ -91,7 +113,7 @@ const game = new Game($<HTMLCanvasElement>('game'), audio, {
 if (import.meta.env.DEV) Object.assign(window, { game });
 
 function show(el: HTMLElement | null) {
-  for (const o of [menu, pauseEl, over]) o.classList.toggle('hidden', o !== el);
+  for (const o of [menu, bibles, pauseEl, over]) o.classList.toggle('hidden', o !== el);
   if (el) el.querySelector<HTMLButtonElement>('button.primary')?.focus();
   // A hidden button keeping focus would still take Enter and Space.
   else (document.activeElement as HTMLElement | null)?.blur();
@@ -285,18 +307,218 @@ function showGameOver(s: GameStats) {
   setTimeout(() => show(over), 900);
 }
 
+/** List the translations in the menu, choosing `selected` if it's there. */
+async function fillTranslations(selected: string) {
+  const list = await translations();
+  translation.replaceChildren(
+    ...list.map((t) => new Option(`${t.abbreviation} — ${t.name}`, t.id, false, t.id === selected)),
+  );
+  if (!list.length) translation.append(new Option('None installed', ''));
+}
+
+function setAddStatus(text: string, tone: 'error' | 'ok' | null = null) {
+  addStatus.textContent = text;
+  addStatus.classList.toggle('error', tone === 'error');
+  addStatus.classList.toggle('ok', tone === 'ok');
+}
+
+const BOOKS = 66;
+
+function isComplete(books: StoredBook[]): boolean {
+  return books.length === BOOKS && books.every((b) => !b.missing.length);
+}
+
+/** Numbers as runs: [1, 2, 3, 5] is "1–3, 5". */
+function runs(nums: number[]): string {
+  const out: string[] = [];
+  for (let i = 0; i < nums.length; i++) {
+    let j = i;
+    while (nums[j + 1] === nums[j] + 1) j++;
+    out.push(j > i ? `${nums[i]}–${nums[j]}` : String(nums[i]));
+    i = j;
+  }
+  return out.join(', ');
+}
+
+/** Whether all 66 books are there with every chapter, and if not, what's missing. */
+function describeBooks(books: StoredBook[], names: Map<string, string>): string {
+  if (isComplete(books)) return 'All 66 books, every chapter';
+  const have = new Set(books.map((b) => b.usfm));
+  const absent = [...names.keys()].filter((u) => !have.has(u)).map((u) => names.get(u)!);
+  const present = [...names.keys()].filter((u) => have.has(u)).map((u) => names.get(u)!);
+  const parts = [
+    !absent.length
+      ? 'All 66 books'
+      : absent.length <= 8
+        ? `${books.length} of 66 books, without ${absent.join(', ')}`
+        : present.length <= 8
+          ? `${books.length} of 66 books: ${present.join(', ')}`
+          : `${books.length} of 66 books`,
+  ];
+  const partial = books.filter((b) => b.missing.length);
+  for (const b of partial.slice(0, 3)) {
+    parts.push(`${names.get(b.usfm)} lacks chapter${b.missing.length === 1 ? '' : 's'} ${runs(b.missing)}`);
+  }
+  if (partial.length > 3) parts.push(`${partial.length - 3} more books lack chapters`);
+  return parts.join('; ');
+}
+
+/** The player's own translation that books added under `abbreviation` would go into. */
+async function localTranslation(abbreviation: string): Promise<Translation | undefined> {
+  const id = localId(abbreviation);
+  return (await translations()).find((t) => t.local && t.id === id);
+}
+
+/** Books as they'd be with `added` put into `t`. */
+function merged(t: Translation | undefined, added: StoredBook[]): StoredBook[] {
+  const codes = new Set(added.map((b) => b.usfm));
+  return [...(t?.books ?? []).filter((b) => !codes.has(b.usfm)), ...added];
+}
+
+/** The chosen files, once read. */
+let picked: { files: File[]; books: BookFile[]; problems: string[] } | null = null;
+
+/** Read the chosen files and say what the translation would have with them. */
+async function previewFiles() {
+  const files = [...(bibleFiles.files ?? [])];
+  picked = null;
+  if (!files.length) return setAddStatus('');
+  setAddStatus('Reading the books…');
+  try {
+    const result = await readBookFiles(files);
+    // Other files may have been chosen meanwhile.
+    if (bibleFiles.files?.[0] !== files[0]) return;
+    picked = { files, ...result };
+    await showPicked();
+  } catch (e) {
+    setAddStatus(`Couldn’t read the books: ${e}`, 'error');
+  }
+}
+
+async function showPicked() {
+  if (!picked) return;
+  const { books, problems } = picked;
+  if (!books.length) return setAddStatus(problems.join(' ') || 'No books found.', 'error');
+  const t = await localTranslation(bibleAbbrev.value);
+  const all = merged(t, books);
+  const into = t ? `Your ${t.abbreviation} with these: ` : '';
+  const summary = `${into}${describeBooks(all, await bookNames())}.`;
+  const tone = isComplete(all) ? 'ok' : problems.length ? 'error' : null;
+  setAddStatus([summary, ...problems].join(' '), tone);
+}
+
+/** Each translation, with which of its books are kept here, and a way to delete them. */
+async function fillLibrary() {
+  const list = await translations();
+  // Naming what's missing needs logoxide; a complete translation doesn't.
+  const names = list.some((t) => t.books && !isComplete(t.books)) ? await bookNames() : new Map<string, string>();
+  const items = await Promise.all(
+    list.map(async (t) => {
+      const kept = await keptBooks(t);
+      const remote = !t.local && new URL(t.url, location.href).origin !== location.origin;
+      const li = document.createElement('li');
+      const label = document.createElement('span');
+      const title = document.createElement('strong');
+      title.textContent = t.abbreviation;
+      const detail = document.createElement('small');
+      const books = kept.map((b) => b.toUpperCase()).join(', ');
+      detail.textContent = t.books
+        ? `Your own: ${describeBooks(t.books, names)}`
+        : remote
+          ? kept.length
+            ? `Downloaded: ${books}`
+            : 'Downloaded as passages need it'
+          : 'Installed on this site';
+      label.append(title, ` ${t.name}`, detail);
+      li.append(label);
+      if (t.local || kept.length) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'link';
+        btn.textContent = t.local ? 'Delete' : 'Clear';
+        btn.addEventListener('click', async () => {
+          if (t.local && !confirm(`Delete your ${t.abbreviation} from this browser?`)) return;
+          await forget(t);
+          forgetBooks(t.id);
+          await refreshTranslations();
+        });
+        li.append(btn);
+      }
+      return li;
+    }),
+  );
+  bibleList.replaceChildren(...items);
+  myBibles.replaceChildren(...list.filter((t) => t.local).map((t) => new Option(t.name, t.abbreviation)));
+}
+
+async function refreshTranslations(selected = translation.value) {
+  await Promise.all([fillTranslations(selected), fillLibrary()]);
+  save(SCRIPTURE_KEY, JSON.stringify(readScripture()));
+}
+
+async function openLibrary() {
+  show(bibles);
+  setAddStatus('');
+  await fillLibrary();
+  if (!(await canKeepBooks())) {
+    for (const el of [bibleAbbrev, bibleName, bibleFiles, addBooks]) el.disabled = true;
+    setAddStatus('This browser can’t keep files for the game (it needs https), so you can’t add your own.', 'error');
+  }
+  bibleAbbrev.focus();
+}
+
+function closeLibrary() {
+  show(menu);
+  translation.focus();
+}
+
+addBible.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const files = [...(bibleFiles.files ?? [])];
+  const abbreviation = bibleAbbrev.value.trim();
+  if (!files.length || !abbreviation) return;
+  addBooks.disabled = true;
+  setAddStatus('Reading the books…');
+  try {
+    const read = picked?.files[0] === files[0] ? picked : { files, ...(await readBookFiles(files)) };
+    const { books, problems } = read;
+    if (!books.length) throw new Error(problems.join(' ') || 'No books found.');
+    const t = await saveLocalBooks(abbreviation, bibleName.value, books);
+    forgetBooks(t.id);
+    await refreshTranslations(t.id);
+    const all = (await translations()).find((l) => l.id === t.id)?.books ?? [];
+    const count = `${books.length} book${books.length === 1 ? '' : 's'}`;
+    const added = `Added ${count} to your ${t.abbreviation}: ${describeBooks(all, await bookNames())}.`;
+    setAddStatus([added, ...problems].join(' '), isComplete(all) ? 'ok' : problems.length ? 'error' : null);
+    picked = null;
+    addBible.reset();
+    syncScriptureUi();
+    previewPassages();
+  } catch (err) {
+    setAddStatus(err instanceof Error ? err.message : String(err), 'error');
+  } finally {
+    addBooks.disabled = false;
+  }
+});
+
+// The name of a translation already added fills itself in, and what it would have is said again.
+bibleAbbrev.addEventListener('input', async () => {
+  const t = await localTranslation(bibleAbbrev.value);
+  if (t) bibleName.value = t.name;
+  void showPicked();
+});
+bibleFiles.addEventListener('change', () => void previewFiles());
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !bibles.classList.contains('hidden')) closeLibrary();
+});
+
 applySettings(loadSettings());
 syncSettingsUi();
 applyScripture(loadScripture());
 syncScriptureUi();
 previewPassages();
-void translations().then((list) => {
-  const saved = loadScripture().translation;
-  translation.replaceChildren(
-    ...list.map((t) => new Option(`${t.abbreviation} — ${t.name}`, t.id, false, t.id === saved)),
-  );
-  if (!list.length) translation.append(new Option('None installed', ''));
-});
+void fillTranslations(loadScripture().translation);
 for (const el of [passages, translation, unit, unitWords, order, keepTogether]) {
   el.addEventListener('input', () => {
     syncScriptureUi();
@@ -322,6 +544,8 @@ $('again').addEventListener('click', start);
 $('toMenu').addEventListener('click', toMenu);
 $('quit').addEventListener('click', toMenu);
 $('resume').addEventListener('click', () => game.resume());
+$('manageBibles').addEventListener('click', openLibrary);
+$('closeBibles').addEventListener('click', closeLibrary);
 
 refreshMenu();
 show(menu);

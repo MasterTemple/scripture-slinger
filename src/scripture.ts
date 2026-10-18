@@ -3,10 +3,10 @@
  *
  * References are read by topos and a translation's text by logoxide, both from
  * logoxide's WebAssembly package, which is only loaded once the player asks for
- * passages. A translation is a folder of USX files (one per book, named by its
- * lowercase USFM code) under `public/bibles/`, listed in `translations.json`.
+ * passages. Where the books come from is up to `./bibles`.
  */
-import type { LogoxideBook, Passage, Topos } from 'logoxide';
+import type { CatalogEntry, Logoxide, LogoxideBook, Passage, Topos } from 'logoxide';
+import { bookText, translations, type BookFile, type Translation } from './bibles';
 import type { Verse, WavePlan, WordSource } from './words';
 
 export type WaveUnit = 'verse' | 'paragraph' | 'words';
@@ -25,26 +25,18 @@ export interface ScriptureSettings {
 
 export const DEFAULT_SCRIPTURE: ScriptureSettings = {
   passages: '',
-  translation: 'esv',
+  translation: 'bsb',
   unit: 'verse',
   words: 20,
   shuffle: false,
   keepTogether: true,
 };
 
-export interface Translation {
-  id: string;
-  name: string;
-  abbreviation: string;
-}
-
 /** References found in what the player wrote, and the parts that aren't references. */
 export interface FoundPassages {
   references: string[];
   unrecognized: string[];
 }
-
-const BIBLES = `${import.meta.env.BASE_URL}bibles/`;
 
 /** Verse labels in styled text: \u0001chapter:verse\u0002, which no Bible's text contains. */
 const LABEL = /\u0001(\d+):(\d+)\u0002/g;
@@ -61,7 +53,6 @@ const STYLE = {
 type Lx = typeof import('logoxide');
 
 let lib: Promise<{ lx: Lx; topos: Topos }> | null = null;
-let installed: Promise<Translation[]> | null = null;
 const books = new Map<string, Promise<LogoxideBook>>();
 
 function logoxide() {
@@ -70,14 +61,6 @@ function logoxide() {
     return { lx, topos: lx.Topos.new() };
   });
   return lib;
-}
-
-/** The translations in `public/bibles/translations.json` (none if it's missing). */
-export function translations(): Promise<Translation[]> {
-  installed ??= fetch(`${BIBLES}translations.json`)
-    .then((r) => (r.ok ? r.json() : []))
-    .catch(() => []);
-  return installed;
 }
 
 /** The references in `input`, for showing the player what will be typed. */
@@ -127,12 +110,9 @@ function loadBook(lx: Lx, topos: Topos, t: Translation, passage: Passage, usfm: 
   const key = `${t.id}/${usfm}`;
   let book = books.get(key);
   if (!book) {
-    book = fetch(`${BIBLES}${t.id}/${usfm.toLowerCase()}.usx`)
-      .then((r) => {
-        if (!r.ok) throw new Error(`The ${t.abbreviation} has no ${passage.book}.`);
-        return r.text();
-      })
+    book = bookText(t, usfm)
       .then((text) => {
+        if (text === null) throw new Error(`The ${t.abbreviation} has no ${passage.book}.`);
         const parsed = lx.LogoxideBook.parse(topos, 'usx', text);
         if (!parsed) throw new Error(`The ${t.abbreviation}’s ${passage.book} couldn’t be read.`);
         return parsed;
@@ -142,6 +122,120 @@ function loadBook(lx: Lx, topos: Topos, t: Translation, passage: Passage, usfm: 
     books.set(key, book);
   }
   return book;
+}
+
+/** Each book's name, by its lowercase USFM code, in Bible order. */
+export async function bookNames(): Promise<Map<string, string>> {
+  const { topos } = await logoxide();
+  return new Map(topos.books().map((b) => [b.usfm.toLowerCase(), b.name]));
+}
+
+/** Forget the books of translation `id` read so far, so changed files are read again. */
+export function forgetBooks(id: string) {
+  for (const key of books.keys()) if (key.startsWith(`${id}/`)) books.delete(key);
+}
+
+/**
+ * Enough of a catalog entry for logoxide's eBible.org import to unzip a zip of USFM books (as
+ * eBible.org's `<id>_usfm.zip` are), which is all of it that's used.
+ */
+const ZIP_ENTRY: CatalogEntry = {
+  id: 'upload',
+  name: 'Upload',
+  abbreviation: 'UPLOAD',
+  aliases: [],
+  language: 'und',
+  languageName: null,
+  script: null,
+  description: null,
+  license: null,
+  rights: { redistributable: null, derivatives: null, commercial: null, attribution: null },
+  copyright: null,
+  version: null,
+  kind: 0, // PackageKind.Bible
+  rightToLeft: false,
+  source: { tag: 'External', _import: 'ebible:upload', upstream: null, tracksVersions: false, downloads: [] },
+  path: null,
+  releases: [],
+  keywords: [],
+  categories: [],
+  aboutBooks: [],
+  work: null,
+  edition: null,
+  editionYear: null,
+  keys: null,
+};
+
+/** A zip file starts with "PK\3\4". */
+const isZip = (b: Uint8Array) => b[0] === 0x50 && b[1] === 0x4b && b[2] === 3 && b[3] === 4;
+
+function errorText(e: unknown): string {
+  // logoxide's exceptions carry their message in `value`.
+  const value = (e as { value?: { message?: string } } | null)?.value;
+  return value?.message ?? (e instanceof Error ? e.message : String(e));
+}
+
+/**
+ * The books in a player's USX or USFM files (or zips of USFM files), each with the chapters it's
+ * missing, and what's wrong with the files that aren't books.
+ */
+export async function readBookFiles(files: File[]): Promise<{ books: BookFile[]; problems: string[] }> {
+  const { lx, topos } = await logoxide();
+  const chapters = new Map(topos.books().map((b) => [b.usfm.toUpperCase(), b.chapters]));
+  const found = new Map<string, BookFile>();
+  const problems: string[] = [];
+  let converter: Logoxide | null = null;
+
+  /** Read one book; false if it isn't one of the 66. */
+  const read = (name: string, text: string): boolean => {
+    text = text.replace(/^﻿/, '');
+    if (/^\s*\\id\s/.test(text)) text = (converter ??= lx.Logoxide.new()).usfmToUsx(text);
+    const code = /<book\b[^>]*\bcode="([^"]+)"/.exec(text)?.[1].toUpperCase();
+    if (!code) {
+      problems.push(`${name} isn’t a USX or USFM book.`);
+      return true;
+    }
+    const expected = chapters.get(code);
+    if (expected === undefined) return false;
+    const book = lx.LogoxideBook.parse(topos, 'usx', text);
+    if (!book) {
+      problems.push(`${name} couldn’t be read.`);
+      return true;
+    }
+    const has = new Set(book.chapters());
+    const missing = Array.from({ length: expected }, (_, i) => i + 1).filter((c) => !has.has(c));
+    found.set(code, { usfm: code.toLowerCase(), usx: text, missing });
+    return true;
+  };
+
+  for (const file of files) {
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (!isZip(bytes)) {
+        const ok = read(file.name, new TextDecoder().decode(bytes));
+        if (!ok) problems.push(`${file.name} isn’t one of the 66 books.`);
+        continue;
+      }
+      const inside = (converter ??= lx.Logoxide.new())
+        .importDownloaded(ZIP_ENTRY, [{ path: 'zip', bytes }])
+        .filter((f) => f.path.startsWith('usfm/'));
+      if (!inside.length) {
+        problems.push(`${file.name} has no USFM books in it.`);
+        continue;
+      }
+      // Front matter, glossaries and the deuterocanon are left out.
+      let others = 0;
+      for (const f of inside) {
+        if (!read(`${file.name}: ${f.path.slice('usfm/'.length)}`, new TextDecoder().decode(f.bytes))) others++;
+      }
+      if (others) {
+        problems.push(`Left out ${others} file${others === 1 ? '' : 's'} of ${file.name} not among the 66 books.`);
+      }
+    } catch (e) {
+      problems.push(`${file.name} couldn’t be read: ${errorText(e)}`);
+    }
+  }
+  return { books: [...found.values()], problems };
 }
 
 /** A word of a passage, with where it is and whether a verse or paragraph begins with it. */
@@ -206,11 +300,14 @@ function readTokens(lx: Lx, book: LogoxideBook, passage: Passage): Token[] {
   return tokens;
 }
 
-/** Split text into words to type. A dash ends a word ("Christ—I" is two), and lone punctuation joins a word. */
+/**
+ * Split text into words to type. A dash ends a word ("Christ—I" is two), and lone punctuation joins a word.
+ * The KJV's paragraph signs (¶) aren't typed.
+ */
 function words(text: string): string[] {
   const out: string[] = [];
   let lead = '';
-  for (const piece of text.split(/\s+/)) {
+  for (const piece of text.replace(/¶/g, ' ').split(/\s+/)) {
     for (const w of piece.split(/(?<=[—–])(?=.)/u)) {
       if (!w) continue;
       if (!/[\p{L}\p{N}]/u.test(w)) {

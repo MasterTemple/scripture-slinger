@@ -51,7 +51,10 @@
               <div class="passage-options" id="passageOptions">
                 <div class="row">
                   <label for="translation">Translation</label>
-                  <select id="translation"></select>
+                  <span class="picker">
+                    <select id="translation"></select>
+                    <button id="manageBibles" class="link" type="button">Manage</button>
+                  </span>
                 </div>
                 <div class="row">
                   <label for="unit">Each wave is</label>
@@ -149,6 +152,42 @@
           <span id="best"></span>
           <button id="mute" class="link"></button>
         </div>
+      </div>
+    </div>
+
+    <div id="bibles" class="overlay hidden">
+      <div class="panel library">
+        <h2>Translations</h2>
+        <p class="muted">Books are downloaded as passages need them, then kept in this browser.</p>
+        <ul id="bibleList" class="bible-list"></ul>
+
+        <form id="addBible">
+          <fieldset class="settings">
+            <legend>Add your own</legend>
+            <p class="hint">
+              USX or USFM files, one per book, or a zip of USFM files (like eBible.org's downloads). They stay in
+              this browser and are never sent anywhere. Use an abbreviation you've used before to add books to that
+              translation.
+            </p>
+            <div class="row">
+              <label for="bibleAbbrev">Abbreviation</label>
+              <input type="text" id="bibleAbbrev" list="myBibles" maxlength="16" required placeholder="NIV" />
+              <datalist id="myBibles"></datalist>
+            </div>
+            <div class="row">
+              <label for="bibleName">Name</label>
+              <input type="text" id="bibleName" maxlength="80" placeholder="New International Version" />
+            </div>
+            <div class="row">
+              <label for="bibleFiles">Books</label>
+              <input type="file" id="bibleFiles" multiple required accept=".usx,.xml,.usfm,.sfm,.txt,.zip" />
+            </div>
+            <p id="addStatus" class="status" aria-live="polite"></p>
+            <button id="addBooks" class="primary" type="submit">Add books</button>
+          </fieldset>
+        </form>
+
+        <button id="closeBibles" class="link" type="button">Back to the menu</button>
       </div>
     </div>
 
