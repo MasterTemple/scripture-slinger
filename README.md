@@ -33,7 +33,7 @@ npm run build    # type-check + production build into dist/
 Name passages in the menu's **Scripture** box (`John 1:1-14; Psalm 23; Romans 8:28-39`, or any text with references in it) and the waves walk through their words in reading order. Leave it empty for random Bible words.
 
 - Every creature takes the same time to reach David, so they arrive in reading order: defeating whatever is closest types the passage in order.
-- A giant's words are interspersed with the creatures' (every other word of a stretch of the wave). He shows a word only when its turn comes, once the creatures before it are defeated, and nothing more comes until it's typed. He advances only while he has a word up.
+- A giant wave is the giant alone, carrying every word of the wave: each word appears as soon as you finish the one before. He's paced like the creatures those words would have been (one creature's journey, plus a spawn's wait for each word).
 
 - **Each wave is** a verse, a paragraph (a stanza in poetry), or a set number of words.
 - **Passages come** in the order given, or shuffled. When shuffled, **Keep each passage together** decides whether `John 1:1-3` stays one run in order or its verses are shuffled in with the rest.

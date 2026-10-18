@@ -58,9 +58,6 @@ const STYLE = {
   limit: null,
 };
 
-/** A giant carries every other word of a stretch this long in the middle of its wave. */
-const GIANT_SPAN = 14;
-
 type Lx = typeof import('logoxide');
 
 let lib: Promise<{ lx: Lx; topos: Topos }> | null = null;
@@ -261,15 +258,6 @@ function toChunk(lx: Lx, topos: Topos, book: string, tokens: Token[]): Chunk {
   return { verse: { ref: topos.parse(ref, lx.BookStyle.Name)?.reference ?? ref, text }, words };
 }
 
-/** Which of a wave's words its giant carries: every other word of a stretch in the middle, between other creatures'. */
-function giantWords(count: number): Set<number> {
-  const span = Math.min(GIANT_SPAN, count);
-  const start = Math.floor((count - span) / 2);
-  const out = new Set<number>();
-  for (let i = start; i < start + span; i += 2) out.add(i);
-  return out;
-}
-
 function shuffle<T>(list: T[]): T[] {
   for (let i = list.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -301,7 +289,7 @@ export class PassageSource implements WordSource {
       this.index = 0;
     }
     const chunk = this.order[this.index++];
-    const giant = boss ? giantWords(chunk.words.length) : new Set<number>();
-    return { verse: chunk.verse, words: chunk.words.map((text, i) => ({ text, giant: giant.has(i) })) };
+    // A giant wave is the giant alone, carrying all of its words.
+    return { verse: chunk.verse, words: chunk.words.map((text) => ({ text, giant: boss })) };
   }
 }

@@ -548,7 +548,8 @@ export function drawEnemy(g: CanvasRenderingContext2D, e: Enemy) {
 /** A giant's health: how much of its phrase is left to type. */
 function drawHealth(g: CanvasRenderingContext2D, e: Enemy) {
   const left = 1 - (e.spent + e.typed) / e.total;
-  const w = 96;
+  // Longer phrases get a longer bar, so the notches between words stay apart.
+  const w = Math.min(240, Math.max(96, e.total * 2.5));
   const h = 8;
   const x = e.x - w / 2;
   // Under the word, which stays on screen while the giant comes in from the top.

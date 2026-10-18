@@ -536,7 +536,13 @@ export class Game {
     } else {
       const rest = planned.slice(this.plannedAt + 1).filter((w) => w.giant);
       const queue = rest.map((w) => this.toWords(w.text)[0]).filter((w) => w !== undefined);
-      this.addEnemy(word, queue, 'goliath', false).waitsTurn = true;
+      const enemy = this.addEnemy(word, queue, 'goliath', false);
+      enemy.waitsTurn = true;
+      // Paced like the creatures his words would have been: one's journey, plus a spawn's
+      // wait for each word.
+      const distance = Math.hypot(enemy.x - this.px(), enemy.y - this.py()) - enemy.radius - 24;
+      const base = this.enemySpeed();
+      enemy.speed = distance / (distance + base * (queue.length + 1) * this.spawnInterval());
       this.giantCame = true;
     }
     this.plannedAt++;
