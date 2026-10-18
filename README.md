@@ -30,7 +30,10 @@ npm run build    # type-check + production build into dist/
 
 ## Typing passages
 
-Name passages in the menu's **Scripture** box (`John 1:1-14; Psalm 23; Romans 8:28-39`, or any text with references in it) and the waves walk through their words in reading order, each Goliath carrying a clause from its wave. Leave it empty for random Bible words.
+Name passages in the menu's **Scripture** box (`John 1:1-14; Psalm 23; Romans 8:28-39`, or any text with references in it) and the waves walk through their words in reading order. Leave it empty for random Bible words.
+
+- Every creature takes the same time to reach David, so they arrive in reading order: defeating whatever is closest types the passage in order.
+- A giant's words are interspersed with the creatures' (every other word of a stretch of the wave). He shows a word only when its turn comes, once the creatures before it are defeated, and nothing more comes until it's typed. He advances only while he has a word up.
 
 - **Each wave is** a verse, a paragraph (a stanza in poetry), or a set number of words.
 - **Passages come** in the order given, or shuffled. When shuffled, **Keep each passage together** decides whether `John 1:1-3` stays one run in order or its verses are shuffled in with the rest.
@@ -50,9 +53,9 @@ The game only asks for words through the `WordSource` interface in `src/words.ts
 
 ```ts
 interface WordSource {
-  startWave?(boss: boolean): { verse; size; bossAt } | null;
-  next(req: { minLen; maxLen; phrase; punctuation; accept(word): boolean }): string | null;
+  startWave?(boss: boolean): { verse; words: { text; giant }[] } | null;
+  next?(req: { minLen; maxLen; phrase; punctuation; accept(word): boolean }): string | null;
 }
 ```
 
-Pass your own implementation to `game.start(settings, source)` in `src/main.ts`. Return text exactly as written, with its capitals and punctuation. `toTypeable` strips or lowercases it to match the player's settings, and `normalizeChar` maps curly quotes and dashes to plain keys. Call `req.accept(word)` to skip words whose first key is already taken on screen, so every enemy can be locked onto without ambiguity. `startWave` is optional: a source that plans its own waves (like `PassageSource` in `src/scripture.ts`) returns the banner verse, how many regular enemies the wave has, and how many come before its giant.
+Pass your own implementation to `game.start(settings, source)` in `src/main.ts`. Return text exactly as written, with its capitals and punctuation. `toTypeable` strips or lowercases it to match the player's settings, and `normalizeChar` maps curly quotes and dashes to plain keys. Call `req.accept(word)` to skip words whose first key is already taken on screen, so every enemy can be locked onto without ambiguity. A source that plans its own waves (like `PassageSource` in `src/scripture.ts`) implements `startWave` instead, returning the banner verse and the wave's words in the order they should be typed, with the giant's marked; the game keeps them in that order.

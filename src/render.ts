@@ -570,7 +570,8 @@ function drawHealth(g: CanvasRenderingContext2D, e: Enemy) {
   g.fillStyle = 'rgba(10, 6, 22, 0.9)';
   let at = e.spent + e.target.length;
   for (const word of e.queue) {
-    g.fillRect(x + (w * (e.total - at)) / e.total - 0.5, y, 1, h);
+    // (A giant waiting for its turn has no word shown, so no notch at the bar's end.)
+    if (at > e.spent) g.fillRect(x + (w * (e.total - at)) / e.total - 0.5, y, 1, h);
     at += word.target.length;
   }
   g.restore();
@@ -598,6 +599,8 @@ export function labelY(e: Enemy) {
 }
 
 export function drawLabel(g: CanvasRenderingContext2D, e: Enemy, locked: boolean, w: number) {
+  // A giant between words of a passage has nothing to type yet.
+  if (!e.chars.length) return;
   const size = e.kind === 'goliath' ? 20 : 17;
   g.font = `700 ${size}px ${MONO}`;
   g.textBaseline = 'middle';

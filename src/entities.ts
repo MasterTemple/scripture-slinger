@@ -1,5 +1,12 @@
 export type EnemyKind = 'locust' | 'raven' | 'serpent' | 'goliath';
 
+export interface EnemyWord {
+  /** Characters as displayed (original casing/punctuation). */
+  chars: string[];
+  /** Normalized characters the player must type; same length as `chars`. */
+  target: string[];
+}
+
 export interface Enemy {
   id: number;
   kind: EnemyKind;
@@ -9,7 +16,9 @@ export interface Enemy {
   target: string[];
   typed: number;
   /** Words still to come after the one shown (a giant's phrase). */
-  queue: { chars: string[]; target: string[] }[];
+  queue: EnemyWord[];
+  /** In a passage, a giant shows its next word only when that word's turn comes. */
+  waitsTurn: boolean;
   /** Letters in all of the enemy's words, and how many of them are already typed; a giant's health. */
   total: number;
   spent: number;

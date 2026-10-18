@@ -1,7 +1,7 @@
 import type { AudioFX } from './audio';
-import type { Enemy, EnemyKind, FloatText, Particle, Projectile, Ring, Star } from './entities';
+import type { Enemy, EnemyKind, EnemyWord, FloatText, Particle, Projectile, Ring, Star } from './entities';
 import * as draw from './render';
-import { DefaultWordSource, normalizeChar, randomVerse, toTypeable, type WordSource } from './words';
+import { DefaultWordSource, normalizeChar, randomVerse, toTypeable, type PlannedWord, type WordSource } from './words';
 
 export interface GameStats {
   score: number;
@@ -104,8 +104,11 @@ export class Game {
   private waveSize = 0;
   private spawnTimer = 0;
   private bossQueued = false;
-  /** Regular enemies spawned before the boss comes. */
-  private bossAt = 0;
+  /** A passage wave's words in reading order (null for random words), and how many have come. */
+  private planned: PlannedWord[] | null = null;
+  private plannedAt = 0;
+  /** Whether this wave's giant has come; once it's gone, the rest of its words are let go. */
+  private giantCame = false;
   /** The passage being typed this wave, shown in the HUD; null for random words. */
   private waveRef: string | null = null;
   private source: WordSource = new DefaultWordSource();
@@ -242,11 +245,14 @@ export class Game {
     this.waveTypos = 0;
     this.wave++;
     this.waveTime = 0;
-    this.bossQueued = this.wave % 5 === 0;
-    const plan = this.source.startWave?.(this.bossQueued) ?? null;
-    this.waveSize = plan?.size ?? Math.min(Math.round(Math.min(6 + this.wave * 2, 40) * this.crowd()), 100);
+    const boss = this.wave % 5 === 0;
+    const plan = this.source.startWave?.(boss) ?? null;
+    this.planned = plan?.words ?? null;
+    this.plannedAt = 0;
+    this.giantCame = false;
+    this.bossQueued = boss && !plan;
+    this.waveSize = plan ? 0 : Math.min(Math.round(Math.min(6 + this.wave * 2, 40) * this.crowd()), 100);
     this.toSpawn = this.waveSize;
-    this.bossAt = plan?.bossAt ?? Math.ceil(this.waveSize / 2);
     this.spawnTimer = 0;
     const verse = plan?.verse ?? randomVerse();
     this.waveRef = plan ? verse.ref : null;
@@ -254,7 +260,7 @@ export class Game {
       this.shofars++;
       notes.push('+1 Shofar');
     }
-    if (this.bossQueued) notes.push('A Giant Approaches');
+    if (boss) notes.push('A Giant Approaches');
     this.banner = { title: `Wave ${this.wave}`, notes, text: verse.text, ref: verse.ref, t: BANNER_TIME };
     this.audio.wave();
   }
@@ -356,11 +362,12 @@ export class Game {
       this.wordsDone++;
       this.lockId = null;
       target.spent += target.target.length;
-      const next = target.queue.shift();
-      if (next) {
-        // Each word of a giant's phrase is a blow; the next word is a fresh target.
-        target.chars = next.chars;
-        target.target = next.target;
+      if (target.spent < target.total) {
+        // Each word of a giant's phrase is a blow; the next word is a fresh target. In a
+        // passage, the giant shows nothing until its next word's turn comes.
+        const next = target.waitsTurn ? undefined : target.queue.shift();
+        target.chars = next?.chars ?? [];
+        target.target = next?.target ?? [];
         target.typed = 0;
         this.score += reward;
         this.texts.push({ x: target.x, y: target.y, text: `+${reward}`, life: 1, color: draw.GOLD });
@@ -465,49 +472,106 @@ export class Game {
     return Math.max(0.12, (base * Math.max(0.3, 1.3 - this.settings.speed * 0.05)) / this.crowd());
   }
 
-  private spawn(kind?: EnemyKind): boolean {
-    const taken = new Set(this.enemies.filter((e) => !e.doomed).map((e) => e.target[e.typed]));
+  /** Text as words to type, with the player's capitalization and punctuation settings applied. */
+  private toWords(text: string): EnemyWord[] {
     const opts = { caseSensitive: this.settings.caseSensitive, punctuation: this.settings.punctuation };
-    const keysFor = (raw: string) => toTypeable(raw, opts).map(normalizeChar);
+    return text
+      .split(/\s+/)
+      .map((w) => toTypeable(w, opts))
+      .filter((chars) => chars.length)
+      .map((chars) => ({ chars, target: chars.map(normalizeChar) }));
+  }
+
+  /** Whether a word can come now: its first key isn't one an enemy on screen is waiting for. */
+  private keyFree(word: EnemyWord): boolean {
+    return !this.enemies.some((e) => !e.doomed && e.target[e.typed] === word.target[0]);
+  }
+
+  /** A random-words wave's next enemy (or its giant), from the word source. */
+  private spawn(kind?: EnemyKind): boolean {
     const boss = kind === 'goliath';
-    const word = this.source.next({
+    const text = this.source.next?.({
       minLen: this.wave < 3 ? 3 : Math.min(3 + Math.floor(this.wave / 3), 7),
       maxLen: Math.min(4 + this.wave, 14),
       phrase: boss,
       punctuation: this.settings.punctuation,
       accept: (raw) => {
-        const first = keysFor(raw)[0];
-        return first !== undefined && first !== ' ' && !taken.has(first);
+        const first = this.toWords(raw)[0];
+        return first !== undefined && this.keyFree(first);
       },
     });
-    if (!word) return false;
-
     // A giant's phrase is shown one word at a time.
-    const words = word
-      .split(/\s+/)
-      .map((w) => toTypeable(w, opts))
-      .filter((chars) => chars.length)
-      .map((chars) => ({ chars, target: chars.map(normalizeChar) }));
+    const words = text ? this.toWords(text) : [];
     const first = words.shift();
     if (!first) return false;
-    const total = words.reduce((n, w) => n + w.target.length, first.target.length);
+    this.addEnemy(first, words, kind, false);
+    return true;
+  }
+
+  /**
+   * A passage wave's next word, in reading order. The giant has no deadline to set its
+   * place, so it shows a word only once the creatures before it are defeated, and nothing
+   * more comes until that word is typed.
+   */
+  private spawnPlanned() {
+    const planned = this.planned!;
+    const item = planned[this.plannedAt];
+    // The giant's word comes as soon as its turn does.
+    if (!item || (this.spawnTimer > 0 && !item.giant)) return;
+    const giant = this.enemies.find((e) => e.kind === 'goliath' && !e.doomed);
+    if (giant?.target.length) return;
+    const word = this.toWords(item.text)[0];
+    if (!word || (item.giant && this.giantCame && !giant)) {
+      this.plannedAt++;
+      return;
+    }
+    if (!this.keyFree(word)) return;
+    if (item.giant && this.enemies.some((e) => e.kind !== 'goliath' && !e.doomed)) return;
+    if (!item.giant) {
+      this.addEnemy(word, [], undefined, true);
+    } else if (giant) {
+      giant.chars = word.chars;
+      giant.target = word.target;
+      giant.queue.shift();
+    } else {
+      const rest = planned.slice(this.plannedAt + 1).filter((w) => w.giant);
+      const queue = rest.map((w) => this.toWords(w.text)[0]).filter((w) => w !== undefined);
+      this.addEnemy(word, queue, 'goliath', false).waitsTurn = true;
+      this.giantCame = true;
+    }
+    this.plannedAt++;
+    this.spawnTimer = this.spawnInterval() * (0.7 + Math.random() * 0.6);
+  }
+
+  /**
+   * `inOrder` gives a creature the speed that brings it to David in the same time as every
+   * other, so creatures arrive in the order they came (a passage's reading order).
+   */
+  private addEnemy(first: EnemyWord, queue: EnemyWord[], kind: EnemyKind | undefined, inOrder: boolean): Enemy {
     const len = first.target.length;
     const k: EnemyKind = kind ?? (len <= 4 ? 'locust' : len <= 7 ? 'raven' : 'serpent');
     const spec = KINDS[k];
     const margin = Math.min(80, this.w * 0.1);
-    this.enemies.push({
+    const x = k === 'goliath' ? this.w / 2 : margin + Math.random() * (this.w - margin * 2);
+    const y = -spec.radius - 10;
+    const reach = spec.radius + 24;
+    const speed = inOrder
+      ? (Math.hypot(x - this.px(), y - this.py()) - reach) / (this.py() - y - reach)
+      : spec.speed * (0.9 + Math.random() * 0.2);
+    const enemy: Enemy = {
       id: this.nextId++,
       kind: k,
       chars: first.chars,
       target: first.target,
       typed: 0,
-      queue: words,
-      total,
+      queue,
+      waitsTurn: false,
+      total: queue.reduce((n, w) => n + w.target.length, len),
       spent: 0,
-      x: boss ? this.w / 2 : margin + Math.random() * (this.w - margin * 2),
-      y: -spec.radius - 10,
+      x,
+      y,
       angle: Math.PI / 2,
-      speed: spec.speed * (0.9 + Math.random() * 0.2),
+      speed,
       radius: spec.radius,
       age: Math.random() * 10,
       doomed: false,
@@ -515,8 +579,9 @@ export class Game {
       flash: 0,
       shake: 0,
       knock: 0,
-    });
-    return true;
+    };
+    this.enemies.push(enemy);
+    return enemy;
   }
 
   private kill(e: Enemy, reward: number) {
@@ -563,15 +628,17 @@ export class Game {
     } else {
       this.waveTime += dt;
       this.spawnTimer -= dt;
-      // Once the boss is due, it comes before any more regular enemies, so a passage stays in order.
-      const bossDue = this.bossQueued && this.waveSize - this.toSpawn >= this.bossAt;
-      if (bossDue) {
+      if (this.planned) {
+        this.spawnPlanned();
+      } else if (this.bossQueued && this.waveSize - this.toSpawn >= Math.ceil(this.waveSize / 2)) {
+        // Halfway through, the giant comes before any more regular enemies.
         if (this.spawn('goliath')) this.bossQueued = false;
       } else if (this.toSpawn > 0 && this.spawnTimer <= 0) {
         if (this.spawn()) this.toSpawn--;
         this.spawnTimer = this.spawnInterval() * (0.7 + Math.random() * 0.6);
       }
-      if (this.toSpawn === 0 && !this.bossQueued && this.enemies.length === 0) this.nextWave();
+      const spawned = this.planned ? this.plannedAt >= this.planned.length : this.toSpawn === 0 && !this.bossQueued;
+      if (spawned && this.enemies.length === 0) this.nextWave();
     }
 
     this.updateEnemies(dt);
@@ -595,7 +662,10 @@ export class Game {
       const d = Math.hypot(dx, dy) || 1;
       const ux = dx / d;
       const uy = dy / d;
-      const v = base * e.speed - e.knock;
+      // A passage's giant advances only while it has a word up (once it's fully on screen), so
+      // waiting for its turns among the creatures doesn't bring it down on David.
+      const waiting = e.waitsTurn && !e.target.length && e.y > e.radius;
+      const v = (waiting ? 0 : base * e.speed) - e.knock;
       e.x += ux * v * dt;
       e.y += uy * v * dt;
       if (e.kind === 'locust') {

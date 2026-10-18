@@ -7,7 +7,7 @@
  * lowercase USFM code) under `public/bibles/`, listed in `translations.json`.
  */
 import type { LogoxideBook, Passage, Topos } from 'logoxide';
-import type { Verse, WavePlan, WordRequest, WordSource } from './words';
+import type { Verse, WavePlan, WordSource } from './words';
 
 export type WaveUnit = 'verse' | 'paragraph' | 'words';
 
@@ -58,8 +58,8 @@ const STYLE = {
   limit: null,
 };
 
-/** A word that ends a clause, for choosing a giant's phrase. */
-const CLAUSE_END = /[,;:.?!—–][’”'")\]]*$/u;
+/** A giant carries every other word of a stretch this long in the middle of its wave. */
+const GIANT_SPAN = 14;
 
 type Lx = typeof import('logoxide');
 
@@ -261,20 +261,13 @@ function toChunk(lx: Lx, topos: Topos, book: string, tokens: Token[]): Chunk {
   return { verse: { ref: topos.parse(ref, lx.BookStyle.Name)?.reference ?? ref, text }, words };
 }
 
-/** The words a giant carries: the longest clause of 3–10 words, else the middle of the wave. */
-function bossPhrase(words: string[]): [number, number] {
-  let best: [number, number] | null = null;
-  let start = 0;
-  for (let i = 0; i < words.length; i++) {
-    if (!CLAUSE_END.test(words[i]) && i < words.length - 1) continue;
-    const len = i + 1 - start;
-    if (len >= 3 && len <= 10 && (!best || len > best[1] - best[0])) best = [start, i + 1];
-    start = i + 1;
-  }
-  if (best) return best;
-  if (words.length <= 8) return [0, words.length];
-  const a = Math.floor((words.length - 6) / 2);
-  return [a, a + 6];
+/** Which of a wave's words its giant carries: every other word of a stretch in the middle, between other creatures'. */
+function giantWords(count: number): Set<number> {
+  const span = Math.min(GIANT_SPAN, count);
+  const start = Math.floor((count - span) / 2);
+  const out = new Set<number>();
+  for (let i = start; i < start + span; i += 2) out.add(i);
+  return out;
 }
 
 function shuffle<T>(list: T[]): T[] {
@@ -289,9 +282,6 @@ function shuffle<T>(list: T[]): T[] {
 export class PassageSource implements WordSource {
   private order: Chunk[] = [];
   private index = 0;
-  private words: string[] = [];
-  private cursor = 0;
-  private phrase: string | null = null;
 
   constructor(
     private readonly groups: Chunk[][],
@@ -311,19 +301,7 @@ export class PassageSource implements WordSource {
       this.index = 0;
     }
     const chunk = this.order[this.index++];
-    const all = chunk.words;
-    const [a, b] = boss ? bossPhrase(all) : [all.length, all.length];
-    this.phrase = boss ? all.slice(a, b).join(' ') : null;
-    this.words = [...all.slice(0, a), ...all.slice(b)];
-    this.cursor = 0;
-    return { verse: chunk.verse, size: this.words.length, bossAt: a };
-  }
-
-  next(req: WordRequest): string | null {
-    // In order: when the next word's first key is taken on screen, wait for it rather than skip ahead.
-    const word = req.phrase ? this.phrase : (this.words[this.cursor] ?? null);
-    if (word === null || !req.accept(word)) return null;
-    if (!req.phrase) this.cursor++;
-    return word;
+    const giant = boss ? giantWords(chunk.words.length) : new Set<number>();
+    return { verse: chunk.verse, words: chunk.words.map((text, i) => ({ text, giant: giant.has(i) })) };
   }
 }
