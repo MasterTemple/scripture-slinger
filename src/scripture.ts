@@ -5,7 +5,7 @@
  * logoxide's WebAssembly package, which is only loaded once the player asks for
  * passages. Where the books come from is up to `./bibles`.
  */
-import type { CatalogEntry, Logoxide, LogoxideBook, Passage, Topos } from 'logoxide';
+import type { Logoxide, LogoxideBook, Passage, Topos } from 'logoxide';
 import { bookText, translations, type BookFile, type Translation } from './bibles';
 import type { Verse, WavePlan, WordSource } from './words';
 
@@ -135,37 +135,6 @@ export function forgetBooks(id: string) {
   for (const key of books.keys()) if (key.startsWith(`${id}/`)) books.delete(key);
 }
 
-/**
- * Enough of a catalog entry for logoxide's eBible.org import to unzip a zip of USFM books (as
- * eBible.org's `<id>_usfm.zip` are), which is all of it that's used.
- */
-const ZIP_ENTRY: CatalogEntry = {
-  id: 'upload',
-  name: 'Upload',
-  abbreviation: 'UPLOAD',
-  aliases: [],
-  language: 'und',
-  languageName: null,
-  script: null,
-  description: null,
-  license: null,
-  rights: { redistributable: null, derivatives: null, commercial: null, attribution: null },
-  copyright: null,
-  version: null,
-  kind: 0, // PackageKind.Bible
-  rightToLeft: false,
-  source: { tag: 'External', _import: 'ebible:upload', upstream: null, tracksVersions: false, downloads: [] },
-  path: null,
-  releases: [],
-  keywords: [],
-  categories: [],
-  aboutBooks: [],
-  work: null,
-  edition: null,
-  editionYear: null,
-  keys: null,
-};
-
 /** A zip file starts with "PK\3\4". */
 const isZip = (b: Uint8Array) => b[0] === 0x50 && b[1] === 0x4b && b[2] === 3 && b[3] === 4;
 
@@ -176,7 +145,7 @@ function errorText(e: unknown): string {
 }
 
 /**
- * The books in a player's USX or USFM files (or zips of USFM files), each with the chapters it's
+ * The books in a player's USX or USFM files (or zips of them), each with the chapters it's
  * missing, and what's wrong with the files that aren't books.
  */
 export async function readBookFiles(files: File[]): Promise<{ books: BookFile[]; problems: string[] }> {
@@ -186,50 +155,49 @@ export async function readBookFiles(files: File[]): Promise<{ books: BookFile[];
   const problems: string[] = [];
   let converter: Logoxide | null = null;
 
-  /** Read one book; false if it isn't one of the 66. */
-  const read = (name: string, text: string): boolean => {
-    text = text.replace(/^﻿/, '');
-    if (/^\s*\\id\s/.test(text)) text = (converter ??= lx.Logoxide.new()).usfmToUsx(text);
+  const lib = () => (converter ??= lx.Logoxide.new());
+
+  /** Read one file: one of the 66 books ('book', even if it couldn't be read), another book, or not a book. */
+  const read = (name: string, text: string): 'book' | 'other' | 'none' => {
+    text = text.replace(/^\uFEFF/, '');
+    if (/^\s*\\id\s/.test(text)) text = lib().usfmToUsx(text);
     const code = /<book\b[^>]*\bcode="([^"]+)"/.exec(text)?.[1].toUpperCase();
-    if (!code) {
-      problems.push(`${name} isn’t a USX or USFM book.`);
-      return true;
-    }
+    if (!code) return 'none';
     const expected = chapters.get(code);
-    if (expected === undefined) return false;
+    if (expected === undefined) return 'other';
     const book = lx.LogoxideBook.parse(topos, 'usx', text);
     if (!book) {
       problems.push(`${name} couldn’t be read.`);
-      return true;
+      return 'book';
     }
     const has = new Set(book.chapters());
     const missing = Array.from({ length: expected }, (_, i) => i + 1).filter((c) => !has.has(c));
     found.set(code, { usfm: code.toLowerCase(), usx: text, missing });
-    return true;
+    return 'book';
   };
 
   for (const file of files) {
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (!isZip(bytes)) {
-        const ok = read(file.name, new TextDecoder().decode(bytes));
-        if (!ok) problems.push(`${file.name} isn’t one of the 66 books.`);
+        const kind = read(file.name, new TextDecoder().decode(bytes));
+        if (kind === 'none') problems.push(`${file.name} isn’t a USX or USFM book.`);
+        if (kind === 'other') problems.push(`${file.name} isn’t one of the 66 books.`);
         continue;
       }
-      const inside = (converter ??= lx.Logoxide.new())
-        .importDownloaded(ZIP_ENTRY, [{ path: 'zip', bytes }])
-        .filter((f) => f.path.startsWith('usfm/'));
-      if (!inside.length) {
-        problems.push(`${file.name} has no USFM books in it.`);
-        continue;
-      }
-      // Front matter, glossaries and the deuterocanon are left out.
+      let books = 0;
       let others = 0;
-      for (const f of inside) {
-        if (!read(`${file.name}: ${f.path.slice('usfm/'.length)}`, new TextDecoder().decode(f.bytes))) others++;
+      for (const f of lib().unzip(bytes)) {
+        // A zip's license, metadata and stylesheets aren't books, and aren't worth a word.
+        if (!/\.(usx|xml|usfm|sfm|txt)$/i.test(f.path) || f.path.includes('__MACOSX/')) continue;
+        const kind = read(`${file.name}: ${f.path}`, new TextDecoder().decode(f.bytes));
+        if (kind === 'book') books++;
+        // Front matter, glossaries and the deuterocanon are left out.
+        if (kind === 'other') others++;
       }
-      if (others) {
-        problems.push(`Left out ${others} file${others === 1 ? '' : 's'} of ${file.name} not among the 66 books.`);
+      if (!books) problems.push(`${file.name} has no USX or USFM books in it.`);
+      else if (others) {
+        problems.push(`Left out ${others} book${others === 1 ? '' : 's'} of ${file.name} not among the 66.`);
       }
     } catch (e) {
       problems.push(`${file.name} couldn’t be read: ${errorText(e)}`);

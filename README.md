@@ -45,7 +45,7 @@ Name passages in the menu's **Scripture** box (`John 1:1-14; Psalm 23; Romans 8:
 - **Passages come** in the order given, or shuffled. When shuffled, **Keep each passage together** decides whether `John 1:1-3` stays one run in order or its verses are shuffled in with the rest.
 - When the passages run out, they start over.
 
-References are read by [topos](https://github.com/MasterTemple/topos-bible) and the text by [logoxide](https://github.com/Logoxide/logoxide), both from logoxide's WebAssembly package, which is only downloaded once a passage is named. It isn't on npm yet, so `package.json` links a local build (`npm run pack:wasm` in `logoxide/crates/logoxide-ffi`).
+References are read by [topos](https://github.com/MasterTemple/topos-bible) and the text by [logoxide](https://github.com/Logoxide/logoxide), both from logoxide's WebAssembly package, which is only downloaded once a passage is named. It comes from npm (`logoxide`).
 
 Each translation is a folder of USX files, one per book, named by its lowercase USFM code (`jhn.usx`). The menu's **Manage** link lists them. There are three kinds (`src/bibles.ts`):
 
@@ -56,7 +56,7 @@ Each translation is a folder of USX files, one per book, named by its lowercase 
   [{ "id": "esv", "name": "English Standard Version", "abbreviation": "ESV" }]
   ```
 
-- **A player's own:** USX or USFM files (one per book), or zips of USFM files like eBible.org's `<id>_usfm.zip`, added under **Manage**. logoxide unzips them, converts USFM to USX and reads each book, and the panel says whether all 66 books are there with every chapter (and if not, which are missing) before they're added. They're kept only in that browser's Cache Storage. Adding books under an abbreviation that's already been used adds them to that translation.
+- **A player's own:** USX or USFM files (one per book), or zips of them (eBible.org's `<id>_usfm.zip`, a Digital Bible Library bundle's USX), added under **Manage**. logoxide unzips them, converts USFM to USX and reads each book, and the panel says whether all 66 books are there with every chapter (and if not, which are missing) before they're added. They're kept only in that browser's Cache Storage. Adding books under an abbreviation that's already been used adds them to that translation.
 
 Cache Storage only exists on https and `localhost`. Without it, the BSB is downloaded again each session and players can't add their own translations.
 
