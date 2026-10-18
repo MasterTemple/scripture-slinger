@@ -69,7 +69,7 @@ const MAX_LIVES = 6;
 const MAX_SHOFARS = 3;
 const STONE_SPEED = 1500;
 const BANNER_TIME = 3.2;
-const BEST_KEY = 'bible-type:best';
+const BEST_KEY = 'scripture-slinger:best';
 /** → skips the rest of a wave; for testing, e.g. to reach a giant wave quickly. */
 const SKIP_KEY = false;
 

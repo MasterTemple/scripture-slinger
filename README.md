@@ -1,4 +1,4 @@
-# Bible Type
+# Scripture Slinger
 
 A typing game in the style of [ZType](https://zty.pe/), themed on the Bible. You are David with a sling. Locusts, ravens, fiery serpents and the occasional Goliath come at you, and you type their words to bring them down.
 

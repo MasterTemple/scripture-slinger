@@ -19,9 +19,9 @@ import {
 } from './scripture';
 import type { WordSource } from './words';
 
-const SETTINGS_KEY = 'bible-type:settings';
-const MUTE_KEY = 'bible-type:muted';
-const SCRIPTURE_KEY = 'bible-type:scripture';
+const SETTINGS_KEY = 'scripture-slinger:settings';
+const MUTE_KEY = 'scripture-slinger:muted';
+const SCRIPTURE_KEY = 'scripture-slinger:scripture';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -68,6 +68,14 @@ function save(key: string, value: string) {
     localStorage.setItem(key, value);
   } catch {
     // Preferences just won't persist.
+  }
+}
+
+// Bring over what was saved before the game was renamed from Bible Type / Bible Slinger.
+for (const name of ['settings', 'muted', 'scripture', 'best']) {
+  for (const prefix of ['bible-slinger', 'bible-type']) {
+    const old = load(`${prefix}:${name}`);
+    if (old !== null && load(`scripture-slinger:${name}`) === null) save(`scripture-slinger:${name}`, old);
   }
 }
 
