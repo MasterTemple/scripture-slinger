@@ -62,6 +62,7 @@ const releaseHint = $('releaseHint');
 const progression = $<HTMLSelectElement>('progression');
 const wpmGap = $<HTMLSelectElement>('wpmGap');
 const shofarRefund = $<HTMLInputElement>('shofarRefund');
+const nextWordOnly = $<HTMLInputElement>('nextWordOnly');
 const muteBtn = $<HTMLButtonElement>('mute');
 const startBtn = $<HTMLButtonElement>('start');
 const passages = $<HTMLTextAreaElement>('passages');
@@ -149,6 +150,7 @@ function readSettings(): GameSettings {
     progression: progression.value as Progression,
     wpmGap: Number(wpmGap.value),
     shofarRefund: shofarRefund.checked,
+    nextWordOnly: nextWordOnly.checked,
   };
 }
 
@@ -162,6 +164,7 @@ function applySettings(s: GameSettings) {
   progression.value = s.progression;
   wpmGap.value = String(s.wpmGap);
   shofarRefund.checked = s.shofarRefund;
+  nextWordOnly.checked = s.nextWordOnly;
   // An unknown saved value leaves a select blank; fall back to the default.
   if (!wpmGap.value) wpmGap.value = String(DEFAULT_SETTINGS.wpmGap);
 }
@@ -208,7 +211,7 @@ function loadScripture(): ScriptureSettings {
 function syncScriptureUi() {
   const none = !passages.value.trim();
   passageOptions.classList.toggle('disabled', none);
-  for (const el of [translation, unit, unitWords, order]) el.disabled = none;
+  for (const el of [translation, unit, unitWords, order, nextWordOnly]) el.disabled = none;
   unitWordsRow.classList.toggle('hidden', unit.value !== 'words');
   const together = none || order.value !== 'shuffled';
   keepTogether.disabled = together;
@@ -526,7 +529,18 @@ for (const el of [passages, translation, unit, unitWords, order, keepTogether]) 
     save(SCRIPTURE_KEY, JSON.stringify(readScripture()));
   });
 }
-for (const el of [speed, progression, caps, punct, shofarRefund, mistake, releaseKey, releaseMode, wpmGap]) {
+for (const el of [
+  speed,
+  progression,
+  caps,
+  punct,
+  shofarRefund,
+  nextWordOnly,
+  mistake,
+  releaseKey,
+  releaseMode,
+  wpmGap,
+]) {
   el.addEventListener('input', () => {
     syncSettingsUi();
     save(SETTINGS_KEY, JSON.stringify(readSettings()));

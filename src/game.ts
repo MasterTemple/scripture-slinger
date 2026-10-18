@@ -40,6 +40,8 @@ export interface GameSettings {
   wpmGap: number;
   /** A shofar blown with nothing to defeat is given back. */
   shofarRefund: boolean;
+  /** In a passage, only the next word in reading order can be locked onto; another letter is a miss. */
+  nextWordOnly: boolean;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -52,6 +54,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   progression: 'faster',
   wpmGap: 0,
   shofarRefund: true,
+  nextWordOnly: false,
 };
 
 type State = 'menu' | 'playing' | 'paused' | 'over';
@@ -335,13 +338,22 @@ export class Game {
     let target = this.locked();
     const continuing = target !== null;
     if (!target) {
-      // A released word that kept its progress is picked up again by its next letter.
-      const candidates = this.enemies.filter((e) => !e.doomed && e.target[e.typed] === ch);
-      const dist = (e: Enemy) => Math.hypot(e.x - this.px(), e.y - this.py());
-      target = candidates.length ? candidates.reduce((a, b) => (dist(b) < dist(a) ? b : a)) : this.typeAhead(ch);
+      const next = this.planned && this.settings.nextWordOnly ? this.nextInOrder() : null;
+      if (next) {
+        target = next.target[next.typed] === ch ? next : null;
+      } else {
+        // A released word that kept its progress is picked up again by its next letter.
+        const candidates = this.enemies.filter((e) => !e.doomed && e.target[e.typed] === ch);
+        const dist = (e: Enemy) => Math.hypot(e.x - this.px(), e.y - this.py());
+        target = candidates.length ? candidates.reduce((a, b) => (dist(b) < dist(a) ? b : a)) : this.typeAhead(ch);
+      }
       // No word starts with a space, so one between words (as when typing a verse from memory) isn't a miss.
       if (!target && ch === ' ') return;
-      if (!target) return this.miss(null);
+      if (!target) {
+        // Show which word was next.
+        if (next) next.shake = 0.25;
+        return this.miss(null);
+      }
       this.lockId = target.id;
     }
 
@@ -378,6 +390,12 @@ export class Game {
         target.reward = reward;
       }
     }
+  }
+
+  /** The word on screen that comes first in the passage's reading order, if any is left to type. */
+  private nextInOrder(): Enemy | null {
+    const left = this.enemies.filter((e) => !e.doomed && e.typed < e.target.length);
+    return left.length ? left.reduce((a, b) => (b.order < a.order ? b : a)) : null;
   }
 
   private miss(target: Enemy | null) {
@@ -561,6 +579,7 @@ export class Game {
       giant.chars = word.chars;
       giant.target = word.target;
       giant.queue.shift();
+      giant.order = this.plannedAt;
     } else {
       const rest = planned.slice(this.plannedAt + 1).filter((w) => w.giant);
       const queue = rest.map((w) => this.toWords(w.text)[0]).filter((w) => w !== undefined);
@@ -573,6 +592,7 @@ export class Game {
       enemy.speed = distance / (distance + base * (queue.length + 1) * this.spawnInterval());
       this.giantCame = true;
     }
+    enemy.order = this.plannedAt;
     this.plannedAt++;
     const wait = this.spawnInterval() * (0.7 + Math.random() * 0.6);
     this.spawnTimer = early > 0 ? Math.max(0, this.spawnTimer) + wait : wait;
@@ -618,6 +638,7 @@ export class Game {
       typed: 0,
       queue,
       waitsTurn: false,
+      order: 0,
       total: queue.reduce((n, w) => n + w.target.length, len),
       spent: 0,
       x,

@@ -24,7 +24,7 @@ export interface ScriptureSettings {
 }
 
 export const DEFAULT_SCRIPTURE: ScriptureSettings = {
-  passages: '',
+  passages: 'Hebrews 1',
   translation: 'bsb',
   unit: 'verse',
   words: 20,

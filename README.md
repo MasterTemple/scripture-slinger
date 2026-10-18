@@ -35,12 +35,13 @@ Every push to `main` is built and published to GitHub Pages by `.github/workflow
 
 ## Typing passages
 
-Name passages in the menu's **Scripture** box (`John 1:1-14; Psalm 23; Romans 8:28-39`, or any text with references in it) and the waves walk through their words in reading order. Leave it empty for random Bible words.
+Name passages in the menu's **Scripture** box (`John 1:1-14; Psalm 23; Romans 8:28-39`, or any text with references in it) and the waves walk through their words in reading order. It starts with Hebrews 1; leave it empty for random Bible words.
 
 - Every creature takes the same time to reach David, so they arrive in reading order: defeating whatever is closest types the passage in order.
 - If you know the verse, type ahead: a letter no enemy on screen is waiting for, but that starts the passage's next word, brings that word in at once (no miss), moving slower so it reaches David no sooner than it would have. Knowing the verse buys you time. A space between words is never a miss.
 - A giant wave is the giant alone, carrying every word of the wave: each word appears as soon as you finish the one before. He's paced like the creatures those words would have been (one creature's journey, plus a spawn's wait for each word).
 
+- **Only the next word** (off by default): with nothing locked, only the word that comes next in reading order can be locked onto. Any other letter is a miss, and the next word shakes to show where you are. Typing ahead still works once every word on screen is done.
 - **Each wave is** a verse, a paragraph (a stanza in poetry), or a set number of words.
 - **Passages come** in the order given, or shuffled. When shuffled, **Keep each passage together** decides whether `John 1:1-3` stays one run in order or its verses are shuffled in with the rest.
 - When the passages run out, they start over.

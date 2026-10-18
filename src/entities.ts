@@ -19,6 +19,8 @@ export interface Enemy {
   queue: EnemyWord[];
   /** In a passage, a giant shows its next word only when that word's turn comes. */
   waitsTurn: boolean;
+  /** Where the word shown comes in a passage's reading order. */
+  order: number;
   /** Letters in all of the enemy's words, and how many of them are already typed; a giant's health. */
   total: number;
   spent: number;
