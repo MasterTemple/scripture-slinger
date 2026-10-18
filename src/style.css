@@ -500,6 +500,16 @@ button.link:focus-visible {
   margin: 0 0 4px;
 }
 
+.library .credit {
+  margin: -12px 0 16px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.library .credit a {
+  color: var(--gold-dim);
+}
+
 .library .hint {
   margin: 0 0 8px;
   font-size: 0.95rem;

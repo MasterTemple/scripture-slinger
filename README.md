@@ -2,11 +2,16 @@
 
 A typing game in the style of [ZType](https://zty.pe/), themed on the Bible. You are David with a sling. Locusts, ravens, fiery serpents and the occasional Goliath come at you, and you type their words to bring them down.
 
+Play it at **https://mastertemple.github.io/scripture-slinger/**.
+
 ```sh
 npm install
 npm run dev      # play at http://localhost:5173
-npm run build    # type-check + production build into dist/
+npm run build    # type-check + production build into dist/, for /scripture-slinger/
+npm run preview  # the build, at http://localhost:4173/scripture-slinger/
 ```
+
+Every push to `master` is built and published to GitHub Pages by `.github/workflows/pages.yml` (the repository's **Settings → Pages → Source** is **GitHub Actions**). The build's `base` in `vite.config.ts` is `/scripture-slinger/`, the repository's name; `npm run dev` serves from `/`.
 
 ## How it plays
 
