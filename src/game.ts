@@ -110,6 +110,8 @@ export class Game {
   /** A passage wave's words in reading order (null for random words), and how many have come. */
   private planned: PlannedWord[] | null = null;
   private plannedAt = 0;
+  /** Time won by typing a passage ahead, still to be spread over the waits before its later words. */
+  private aheadBy = 0;
   /** Whether this wave's giant has come; once it's gone, the rest of its words are let go. */
   private giantCame = false;
   /** The passage being typed this wave, shown in the HUD; null for random words. */
@@ -252,6 +254,7 @@ export class Game {
     const plan = this.source.startWave?.(boss) ?? null;
     this.planned = plan?.words ?? null;
     this.plannedAt = 0;
+    this.aheadBy = 0;
     this.giantCame = false;
     this.bossQueued = boss && !plan;
     this.waveSize = plan ? 0 : Math.min(Math.round(Math.min(6 + this.wave * 2, 40) * this.crowd()), 100);
@@ -507,8 +510,21 @@ export class Game {
     return !this.enemies.some((e) => !e.doomed && e.target[e.typed] === word.target[0]);
   }
 
+  /** Whether every enemy on screen is already defeated, so there's nothing left to type. */
+  private cleared(): boolean {
+    return !this.enemies.some((e) => !e.doomed);
+  }
+
+  /** Slow a new enemy that came `early` seconds before its time so it reaches David no sooner. */
+  private slowFor(enemy: Enemy, early: number) {
+    if (early <= 0) return;
+    const distance = Math.hypot(enemy.x - this.px(), enemy.y - this.py()) - enemy.radius - 24;
+    const journey = distance / (this.enemySpeed() * enemy.speed);
+    enemy.speed *= journey / (journey + early);
+  }
+
   /** A random-words wave's next enemy (or its giant), from the word source. */
-  private spawn(kind?: EnemyKind): boolean {
+  private spawn(kind?: EnemyKind, early = 0): boolean {
     const boss = kind === 'goliath';
     const text = this.source.next?.({
       minLen: this.wave < 3 ? 3 : Math.min(3 + Math.floor(this.wave / 3), 7),
@@ -524,19 +540,24 @@ export class Game {
     const words = text ? this.toWords(text) : [];
     const first = words.shift();
     if (!first) return false;
-    this.addEnemy(first, words, kind, false);
+    this.slowFor(this.addEnemy(first, words, kind, false), early);
     return true;
   }
 
   /**
    * A passage wave's next word, in reading order. The giant has no deadline to set its
    * place, so it shows a word only once the creatures before it are defeated, and nothing
-   * more comes until that word is typed.
+   * more comes until that word is typed. Once everything on screen is defeated, the next
+   * word comes at once rather than waiting its turn, so there's always something to type.
    */
   private spawnPlanned() {
     const word = this.nextPlanned();
     if (!word) return;
     const item = this.planned![this.plannedAt];
+    if (this.spawnTimer > 0 && !item.giant && this.cleared()) {
+      this.bringPlanned(word, this.spawnTimer);
+      return;
+    }
     // The giant's word comes as soon as its turn does.
     if (this.spawnTimer > 0 && !item.giant) return;
     if (!this.keyFree(word)) return;
@@ -563,7 +584,8 @@ export class Game {
   /**
    * Bring the passage's next word on screen (to its creature, or to the giant) and return its
    * enemy. `early` is how long before its time it comes (typed ahead): its creature moves
-   * slower to reach David when it would have, and the words after it keep their times.
+   * slower to reach David when it would have, and that time is shared out over the waits
+   * before the words still to come, so they come more slowly rather than after a pause.
    */
   private bringPlanned(word: EnemyWord, early = 0): Enemy {
     const planned = this.planned!;
@@ -572,8 +594,7 @@ export class Game {
     let enemy: Enemy;
     if (!item.giant) {
       enemy = this.addEnemy(word, [], undefined, true);
-      const journey = (this.py() - enemy.y - enemy.radius - 24) / this.enemySpeed();
-      enemy.speed *= journey / (journey + early);
+      this.slowFor(enemy, early);
     } else if (giant) {
       enemy = giant;
       giant.chars = word.chars;
@@ -594,15 +615,19 @@ export class Game {
     }
     enemy.order = this.plannedAt;
     this.plannedAt++;
-    const wait = this.spawnInterval() * (0.7 + Math.random() * 0.6);
-    this.spawnTimer = early > 0 ? Math.max(0, this.spawnTimer) + wait : wait;
+    this.aheadBy += early;
+    const waits = planned.slice(this.plannedAt).filter((w) => !w.giant).length;
+    const share = waits ? this.aheadBy / waits : 0;
+    this.aheadBy -= share;
+    this.spawnTimer = this.spawnInterval() * (0.7 + Math.random() * 0.6) + share;
     return enemy;
   }
 
   /**
    * Typing ahead in a passage: a key no enemy on screen is waiting for, but that starts the
    * passage's next word, brings that word now (rather than a miss), though it still reaches
-   * David no sooner than it would have, so knowing the verse buys time rather than costing it.
+   * David no sooner than it would have, and the words after it come more slowly to make up the
+   * time, so knowing the verse buys time rather than costing it.
    */
   private typeAhead(ch: string): Enemy | null {
     const word = this.nextPlanned();
@@ -706,8 +731,9 @@ export class Game {
       } else if (this.bossQueued && this.waveSize - this.toSpawn >= Math.ceil(this.waveSize / 2)) {
         // Halfway through, the giant comes before any more regular enemies.
         if (this.spawn('goliath')) this.bossQueued = false;
-      } else if (this.toSpawn > 0 && this.spawnTimer <= 0) {
-        if (this.spawn()) this.toSpawn--;
+      } else if (this.toSpawn > 0 && (this.spawnTimer <= 0 || this.cleared())) {
+        // With nothing left on screen, the next enemy comes at once, slowed to keep its time.
+        if (this.spawn(undefined, Math.max(0, this.spawnTimer))) this.toSpawn--;
         this.spawnTimer = this.spawnInterval() * (0.7 + Math.random() * 0.6);
       }
       const spawned = this.planned ? this.plannedAt >= this.planned.length : this.toSpawn === 0 && !this.bossQueued;
