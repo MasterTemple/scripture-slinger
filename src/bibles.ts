@@ -50,20 +50,23 @@ const CACHE = 'scripture-slinger:bibles';
 const LOCAL = new URL(`${import.meta.env.BASE_URL}my-bibles/`, location.href).href;
 const INDEX = `${LOCAL}index.json`;
 
-/** A translation on fetch.bible, by its id there. */
+/** A translation on fetch.bible's official collection, by its id there. */
 const fetchBible = (id: string, abbreviation: string, name: string, fetchId: string): Translation => ({
   id,
   name,
   abbreviation,
-  url: `https://collection.fetch.bible/bibles/${fetchId}/usx/`,
+  url: `https://v1.fetch.bible/bibles/${fetchId}/usx/`,
 });
+
+/** Where fetch.bible's books were before; the copies kept from there are deleted. */
+const OLD_FETCH_BIBLE = 'https://collection.fetch.bible/';
 
 /** Public domain, so always available. A server's `translations.json` can replace them by id. */
 const BUILT_IN: Translation[] = [
   fetchBible('bsb', 'BSB', 'Berean Standard Bible', 'eng_bsb'),
   fetchBible('kjv', 'KJV', 'King James Version', 'eng_kjv'),
-  // fetch.bible's `eng_web` has the deuterocanon; `eng_webp` is the 66 books.
-  fetchBible('web', 'WEB', 'World English Bible', 'eng_webp'),
+  // fetch.bible's `eng_web` is the 66 books, with "Yahweh" (its `eng_webu` has "the LORD").
+  fetchBible('web', 'WEB', 'World English Bible', 'eng_web'),
 ];
 
 let installed: Promise<Translation[]> | null = null;
@@ -99,9 +102,19 @@ function toTranslation(t: LocalTranslation): Translation {
   };
 }
 
+let oldCleared = false;
+
 async function openCache(): Promise<Cache | null> {
   try {
-    return await caches.open(CACHE);
+    const cache = await caches.open(CACHE);
+    if (!oldCleared) {
+      oldCleared = true;
+      void cache
+        .keys()
+        .then((keys) => Promise.all(keys.filter((r) => r.url.startsWith(OLD_FETCH_BIBLE)).map((r) => cache.delete(r))))
+        .catch(() => {});
+    }
+    return cache;
   } catch {
     return null;
   }
@@ -120,7 +133,8 @@ export async function bookText(t: Translation, usfm: string): Promise<string | n
   if (kept) return kept.text();
   if (t.local) return null;
   const r = await fetch(url);
-  if (!r.ok) return null;
+  // v1.fetch.bible answers a file it doesn't have with a listing of its folder, and a dev server with its page.
+  if (!r.ok || r.headers.get('Content-Type')?.includes('html')) return null;
   if (cache && new URL(url).origin !== location.origin) {
     // Not keeping it only means downloading it again next time.
     await cache.put(url, r.clone()).catch(() => {});

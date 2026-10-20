@@ -52,7 +52,7 @@ References are read by [topos](https://github.com/MasterTemple/topos-bible) and 
 
 Each translation is a folder of USX files, one per book, named by its lowercase USFM code (`jhn.usx`). The menu's **Manage** link lists them. There are three kinds (`src/bibles.ts`):
 
-- **The BSB, KJV and WEB** (public domain) are always available. Their books are downloaded from [fetch.bible](https://fetch.bible) as passages need them, and then kept in the browser's Cache Storage, so each book is only downloaded once. **Clear** deletes the copies. More are a line each in `BUILT_IN`.
+- **The BSB, KJV and WEB** (public domain) are always available. Their books are downloaded from [fetch.bible](https://fetch.bible)'s collection (`v1.fetch.bible`) as passages need them, and then kept in the browser's Cache Storage, so each book is only downloaded once. **Clear** deletes the copies. More are a line each in `BUILT_IN`.
 - **On the server:** folders under `public/bibles/` (`public/bibles/esv/jhn.usx`), listed in `public/bibles/translations.json`. One with the id `bsb`, `kjv` or `web` takes the place of the built-in one. These aren't in this repository.
 
   ```json
