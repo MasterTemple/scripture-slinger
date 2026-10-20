@@ -63,42 +63,76 @@ function logoxide() {
   return lib;
 }
 
+/** The translations the player can choose, as topos's, by their abbreviations: "John 3:16 KJV" names one. */
+function toposTranslations(lx: Lx, list: Translation[]) {
+  let names = lx.ToposTranslations.create();
+  // By lowercase abbreviation. A player's own can share a server's; the first in the menu is the one named.
+  const byName = new Map<string, Translation>();
+  for (const t of list) {
+    const key = t.abbreviation.toLowerCase();
+    if (byName.has(key)) continue;
+    byName.set(key, t);
+    names = names.add(t.abbreviation, []);
+  }
+  return { names, byName };
+}
+
+/** The references in `input`, each with the translation it names, if any. */
+async function search(input: string) {
+  const { lx, topos } = await logoxide();
+  const list = await translations();
+  const { names, byName } = toposTranslations(lx, list);
+  const matches = topos.searchWithTranslations(input, lx.OffsetUnit.Utf16, lx.ToposQuery.create(), names);
+  return { lx, topos, list, matches, byName };
+}
+
 /** The references in `input`, for showing the player what will be typed. */
 export async function findPassages(input: string): Promise<FoundPassages> {
-  const { lx, topos } = await logoxide();
-  const matches = topos.search(input, lx.OffsetUnit.Utf16);
-  // "John 3:16 ESV" is fine: the passages are read in the chosen translation.
-  const names = new Set((await translations()).map((t) => t.abbreviation.toLowerCase()));
+  const { matches } = await search(input);
   const unrecognized: string[] = [];
   let pos = 0;
-  for (const m of [...matches, { start: input.length, end: input.length }]) {
+  // A translation the game doesn't have ("John 3:16 ESV") isn't a reference, so the player is told.
+  const spans = matches.map((m) => ({ start: m.reference.start, end: m.translation?.end ?? m.reference.end }));
+  for (const m of [...spans, { start: input.length, end: input.length }]) {
     for (const part of input.slice(pos, m.start).split(/[,;\n]|\band\b|&/)) {
-      if (/[\p{L}\p{N}]/u.test(part) && !names.has(part.trim().toLowerCase())) unrecognized.push(part.trim());
+      if (/[\p{L}\p{N}]/u.test(part)) unrecognized.push(part.trim());
     }
     pos = m.end;
   }
-  return { references: matches.map((m) => m.passage.reference), unrecognized };
+  const references = matches.map((m) => [m.reference.passage.reference, m.translation?.name].filter(Boolean).join(' '));
+  return { references, unrecognized };
 }
 
 /** Read the passages in `s` and plan their waves. Throws with a message for the player. */
 export async function loadPassages(s: ScriptureSettings): Promise<PassageSource> {
-  const { lx, topos } = await logoxide();
-  const translation = (await translations()).find((t) => t.id === s.translation);
-  if (!translation) throw new Error('That translation isn’t installed.');
+  const { lx, topos, list, matches, byName } = await search(s.passages);
+  const chosen = list.find((t) => t.id === s.translation);
+  if (!chosen) throw new Error('That translation isn’t installed.');
 
-  // Each contiguous range (John 1:1-3 in "John 1:1-3; 3:16") is a passage of its own.
-  const passages = topos.parts(s.passages, lx.OffsetUnit.Utf16).map((p) => p.passage);
+  // Each contiguous range (John 1:1-3 in "John 1:1-3; 3:16") is a passage of its own, read in the
+  // translation its reference names ("John 3:16 KJV"), else the chosen one.
+  const passages = topos.parts(s.passages, lx.OffsetUnit.Utf16).map((p) => {
+    const match = matches.find((m) => m.reference.start <= p.start && p.end <= m.reference.end);
+    const named = match?.translation && byName.get(match.translation.name.toLowerCase());
+    return { passage: p.passage, translation: named || chosen };
+  });
   if (!passages.length) throw new Error('No Bible references found.');
 
   const usfm = new Map(topos.books().map((b) => [b.id, b.usfm]));
   const format = lx.ToposFormat.create().book(lx.BookStyle.Name);
   const groups: Chunk[][] = [];
-  for (const passage of passages) {
+  for (const { passage, translation } of passages) {
     const book = await loadBook(lx, topos, translation, passage, usfm.get(passage.bookId)!);
     const tokens = readTokens(lx, book, passage);
-    groups.push(split(tokens, s).map((t) => toChunk(topos, format, passage, t)));
+    // A wave in another translation than the chosen one says which.
+    const named = translation === chosen ? null : translation.abbreviation;
+    groups.push(split(tokens, s).map((t) => toChunk(topos, format, passage, named, t)));
   }
-  if (!groups.some((g) => g.length)) throw new Error(`The ${translation.abbreviation} has no text for those passages.`);
+  if (!groups.some((g) => g.length)) {
+    const used = [...new Set(passages.map((p) => p.translation))];
+    const which = used.length === 1 ? `The ${used[0].abbreviation} has` : 'Those translations have';
+    throw new Error(`${which} no text for those passages.`);
+  }
   return new PassageSource(
     groups.filter((g) => g.length),
     s,
@@ -312,7 +346,13 @@ function split(tokens: Token[], s: ScriptureSettings): Token[][] {
   return out;
 }
 
-function toChunk(topos: Topos, format: ToposFormat, passage: Passage, tokens: Token[]): Chunk {
+function toChunk(
+  topos: Topos,
+  format: ToposFormat,
+  passage: Passage,
+  translation: string | null,
+  tokens: Token[],
+): Chunk {
   const first = tokens[0];
   const last = tokens[tokens.length - 1];
   const start = { chapter: first.chapter, verse: first.verse };
@@ -320,7 +360,8 @@ function toChunk(topos: Topos, format: ToposFormat, passage: Passage, tokens: To
     last.chapter !== first.chapter || last.verse !== first.verse ? { chapter: last.chapter, verse: last.verse } : null;
   // The wave's verses, in the passage's book; formatting reads only the book and the segments.
   const verses = { ...passage, reference: '', osis: '', usfm: '', segments: [{ tag: 'Verses' as const, start, end }] };
-  const ref = topos.formatPassage(verses, format) ?? passage.reference;
+  const reference = topos.formatPassage(verses, format) ?? passage.reference;
+  const ref = translation ? `${reference} ${translation}` : reference;
   const words = tokens.map((t) => t.word);
   // Words split at a dash are shown joined again.
   const text = words.join(' ').replace(/([—–]) /gu, '$1');
