@@ -151,7 +151,7 @@ export function errorText(e: unknown): string {
  */
 export async function readBookFiles(files: File[]): Promise<{ books: BookFile[]; problems: string[] }> {
   const { lx, topos } = await logoxide();
-  const chapters = new Map(topos.books().map((b) => [b.usfm.toUpperCase(), b.chapters]));
+  const bible = new Map(topos.books().map((b) => [b.id, b]));
   const found = new Map<string, BookFile>();
   const problems: string[] = [];
   let converter: Logoxide | null = null;
@@ -162,18 +162,18 @@ export async function readBookFiles(files: File[]): Promise<{ books: BookFile[];
   const read = (name: string, text: string): 'book' | 'other' | 'none' => {
     text = text.replace(/^\uFEFF/, '');
     if (/^\s*\\id\s/.test(text)) text = lib().usfmToUsx(text);
-    const code = /<book\b[^>]*\bcode="([^"]+)"/.exec(text)?.[1].toUpperCase();
-    if (!code) return 'none';
-    const expected = chapters.get(code);
-    if (expected === undefined) return 'other';
     const book = lx.LogoxideBook.parse(topos, 'usx', text);
-    if (!book?.chapters().length) {
+    const id = book?.bookId();
+    const info = id == null ? undefined : bible.get(id);
+    // A book that isn't one of the 66 (Tobit) still has chapters; a license or a stylesheet doesn't.
+    if (!book || !info) return book?.chapters().length ? 'other' : 'none';
+    const has = new Set(book.chapters());
+    if (!has.size) {
       problems.push(`${name} couldn’t be read.`);
       return 'book';
     }
-    const has = new Set(book.chapters());
-    const missing = Array.from({ length: expected }, (_, i) => i + 1).filter((c) => !has.has(c));
-    found.set(code, { usfm: code.toLowerCase(), usx: text, missing });
+    const missing = Array.from({ length: info.chapters }, (_, i) => i + 1).filter((c) => !has.has(c));
+    found.set(info.usfm.toUpperCase(), { usfm: info.usfm.toLowerCase(), usx: text, missing });
     return 'book';
   };
 
@@ -193,7 +193,7 @@ export async function readBookFiles(files: File[]): Promise<{ books: BookFile[];
         if (!/\.(usx|xml|usfm|sfm|txt)$/i.test(f.path) || f.path.includes('__MACOSX/')) continue;
         const kind = read(`${file.name}: ${f.path}`, new TextDecoder().decode(f.bytes));
         if (kind === 'book') books++;
-        // Front matter, glossaries and the deuterocanon are left out.
+        // The deuterocanon is left out, and front matter and glossaries (with no chapters) aren't counted.
         if (kind === 'other') others++;
       }
       if (!books) problems.push(`${file.name} has no USX or USFM books in it.`);
