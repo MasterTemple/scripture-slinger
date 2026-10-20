@@ -87,9 +87,7 @@ export async function loadPassages(s: ScriptureSettings): Promise<PassageSource>
   if (!translation) throw new Error('That translation isn’t installed.');
 
   // Each contiguous range (John 1:1-3 in "John 1:1-3; 3:16") is a passage of its own.
-  const passages = topos
-    .search(s.passages, lx.OffsetUnit.Utf16)
-    .flatMap((m) => m.passage.segments.map((seg) => ({ ...m.passage, segments: [seg] })));
+  const passages = topos.parts(s.passages, lx.OffsetUnit.Utf16).map((p) => p.passage);
   if (!passages.length) throw new Error('No Bible references found.');
 
   const usfm = new Map(topos.books().map((b) => [b.id, b.usfm]));
