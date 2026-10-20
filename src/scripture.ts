@@ -5,7 +5,7 @@
  * logoxide's WebAssembly package, which is only loaded once the player asks for
  * passages. Where the books come from is up to `./bibles`.
  */
-import type { Logoxide, LogoxideBook, Passage, Topos } from 'logoxide';
+import type { Logoxide, LogoxideBook, Passage, Topos, ToposFormat } from 'logoxide';
 import { bookText, translations, type BookFile, type Translation } from './bibles';
 import type { Verse, WavePlan, WordSource } from './words';
 
@@ -91,11 +91,12 @@ export async function loadPassages(s: ScriptureSettings): Promise<PassageSource>
   if (!passages.length) throw new Error('No Bible references found.');
 
   const usfm = new Map(topos.books().map((b) => [b.id, b.usfm]));
+  const format = lx.ToposFormat.create().book(lx.BookStyle.Name);
   const groups: Chunk[][] = [];
   for (const passage of passages) {
     const book = await loadBook(lx, topos, translation, passage, usfm.get(passage.bookId)!);
     const tokens = readTokens(lx, book, passage);
-    groups.push(split(tokens, s).map((t) => toChunk(lx, topos, passage.book, t)));
+    groups.push(split(tokens, s).map((t) => toChunk(topos, format, passage, t)));
   }
   if (!groups.some((g) => g.length)) throw new Error(`The ${translation.abbreviation} has no text for those passages.`);
   return new PassageSource(
@@ -311,20 +312,19 @@ function split(tokens: Token[], s: ScriptureSettings): Token[][] {
   return out;
 }
 
-function toChunk(lx: Lx, topos: Topos, book: string, tokens: Token[]): Chunk {
+function toChunk(topos: Topos, format: ToposFormat, passage: Passage, tokens: Token[]): Chunk {
   const first = tokens[0];
   const last = tokens[tokens.length - 1];
+  const start = { chapter: first.chapter, verse: first.verse };
   const end =
-    first.chapter !== last.chapter
-      ? `-${last.chapter}:${last.verse}`
-      : first.verse !== last.verse
-        ? `-${last.verse}`
-        : '';
-  const ref = `${book} ${first.chapter}:${first.verse}${end}`;
+    last.chapter !== first.chapter || last.verse !== first.verse ? { chapter: last.chapter, verse: last.verse } : null;
+  // The wave's verses, in the passage's book; formatting reads only the book and the segments.
+  const verses = { ...passage, reference: '', osis: '', usfm: '', segments: [{ tag: 'Verses' as const, start, end }] };
+  const ref = topos.formatPassage(verses, format) ?? passage.reference;
   const words = tokens.map((t) => t.word);
   // Words split at a dash are shown joined again.
   const text = words.join(' ').replace(/([—–]) /gu, '$1');
-  return { verse: { ref: topos.parse(ref, lx.BookStyle.Name)?.reference ?? ref, text }, words };
+  return { verse: { ref, text }, words };
 }
 
 function shuffle<T>(list: T[]): T[] {
