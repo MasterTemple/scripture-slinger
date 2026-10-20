@@ -45,7 +45,7 @@ export interface GameSettings {
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
-  speed: 4,
+  speed: 10,
   caseSensitive: false,
   punctuation: false,
   onMistake: 'continue',
