@@ -113,8 +113,9 @@ function loadBook(lx: Lx, topos: Topos, t: Translation, passage: Passage, usfm: 
     book = bookText(t, usfm)
       .then((text) => {
         if (text === null) throw new Error(`The ${t.abbreviation} has no ${passage.book}.`);
+        // logoxide reads what it can of any markup, so a book it can't read has no chapters.
         const parsed = lx.LogoxideBook.parse(topos, 'usx', text);
-        if (!parsed) throw new Error(`The ${t.abbreviation}’s ${passage.book} couldn’t be read.`);
+        if (!parsed?.chapters().length) throw new Error(`The ${t.abbreviation}’s ${passage.book} couldn’t be read.`);
         return parsed;
       });
     // A failed fetch can be tried again.
@@ -166,7 +167,7 @@ export async function readBookFiles(files: File[]): Promise<{ books: BookFile[];
     const expected = chapters.get(code);
     if (expected === undefined) return 'other';
     const book = lx.LogoxideBook.parse(topos, 'usx', text);
-    if (!book) {
+    if (!book?.chapters().length) {
       problems.push(`${name} couldn’t be read.`);
       return 'book';
     }
