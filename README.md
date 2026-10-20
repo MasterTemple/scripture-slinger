@@ -4,7 +4,7 @@ A typing game in the style of [ZType](https://zty.pe/), themed on the Bible. You
 
 Play it at **https://mastertemple.github.io/scripture-slinger/**.
 
-[![Scripture Slinger on YouTube](https://img.youtube.com/vi/xC3CSkmGfQw/maxresdefault.jpg)](https://www.youtube.com/watch?v=xC3CSkmGfQw)
+[![Scripture Slinger gameplay](docs/gameplay.gif)](https://www.youtube.com/watch?v=xC3CSkmGfQw)
 
 ```sh
 npm install
