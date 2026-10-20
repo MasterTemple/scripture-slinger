@@ -22,6 +22,7 @@ import {
 } from './game';
 import {
   DEFAULT_SCRIPTURE,
+  errorText,
   findPassages,
   bookNames,
   forgetBooks,
@@ -239,7 +240,7 @@ function previewPassages() {
       if (!found.references.length) return setStatus(unknown || 'No Bible references found.', true);
       setStatus([found.references.join(' · '), unknown].filter(Boolean).join(' — '), !!unknown);
     } catch (e) {
-      if (run === previewRun) setStatus(`Couldn’t read references: ${e}`, true);
+      if (run === previewRun) setStatus(`Couldn’t read references: ${errorText(e)}`, true);
     }
   }, 250);
 }
@@ -265,7 +266,7 @@ async function start() {
     try {
       source = await loadPassages(scripture);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : String(e), true);
+      setStatus(errorText(e), true);
       refreshMenu();
       show(menu);
       passages.focus();
@@ -394,7 +395,7 @@ async function previewFiles() {
     picked = { files, ...result };
     await showPicked();
   } catch (e) {
-    setAddStatus(`Couldn’t read the books: ${e}`, 'error');
+    setAddStatus(`Couldn’t read the books: ${errorText(e)}`, 'error');
   }
 }
 
@@ -498,7 +499,7 @@ addBible.addEventListener('submit', async (e) => {
     syncScriptureUi();
     previewPassages();
   } catch (err) {
-    setAddStatus(err instanceof Error ? err.message : String(err), 'error');
+    setAddStatus(errorText(err), 'error');
   } finally {
     addBooks.disabled = false;
   }

@@ -138,8 +138,8 @@ export function forgetBooks(id: string) {
 /** A zip file starts with "PK\3\4". */
 const isZip = (b: Uint8Array) => b[0] === 0x50 && b[1] === 0x4b && b[2] === 3 && b[3] === 4;
 
-function errorText(e: unknown): string {
-  // logoxide's exceptions carry their message in `value`.
+/** What went wrong, for the player. logoxide's exceptions carry it in `value`; their own message is "LogoxideError". */
+export function errorText(e: unknown): string {
   const value = (e as { value?: { message?: string } } | null)?.value;
   return value?.message ?? (e instanceof Error ? e.message : String(e));
 }
