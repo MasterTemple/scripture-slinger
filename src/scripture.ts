@@ -256,17 +256,13 @@ interface Chunk {
 }
 
 function readTokens(lx: Lx, book: LogoxideBook, passage: Passage): Token[] {
-  const styled = book.styledText(passage, STYLE, passage.book);
+  // Marks counted in UTF-16 units, as a string is indexed.
+  const styled = book.styledText(passage, STYLE, passage.book, lx.OffsetUnit.Utf16);
   if (!styled) return [];
   const { text, marks } = styled;
 
-  // Marks count UTF-8 bytes, but a string is indexed by UTF-16 units (a curly quote is 3 bytes, 1 unit).
-  const bytes = new TextEncoder().encode(text);
-  const decoder = new TextDecoder();
-  const index = (byte: number) => decoder.decode(bytes.subarray(0, byte)).length;
-
   // Prose paragraphs are marked; poetry's stanzas are a blank line apart (its lines one newline).
-  const breaks = new Set(marks.filter((m) => m.kind === lx.NodeKind.Paragraph).map((m) => index(m.start)));
+  const breaks = new Set(marks.filter((m) => m.kind === lx.NodeKind.Paragraph).map((m) => m.start));
   for (const m of text.matchAll(/\n\s*\n/g)) breaks.add(m.index + m[0].length);
   const cuts: { at: number; end: number; chapter?: number; verse?: number }[] = [...breaks].map((at) => ({
     at,

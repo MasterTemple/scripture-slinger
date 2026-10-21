@@ -14,7 +14,7 @@
   },
   "private": true,
   "dependencies": {
-    "logoxide": "^0.1.0"
+    "logoxide": "^0.1.1"
   },
   "license": "CC0-1.0"
 }
