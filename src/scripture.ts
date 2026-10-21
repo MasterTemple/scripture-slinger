@@ -345,14 +345,12 @@ function toChunk(
   translation: string | null,
   tokens: Token[],
 ): Chunk {
-  const first = tokens[0];
-  const last = tokens[tokens.length - 1];
-  const start = { chapter: first.chapter, verse: first.verse };
-  const end =
-    last.chapter !== first.chapter || last.verse !== first.verse ? { chapter: last.chapter, verse: last.verse } : null;
-  // The wave's verses, in the passage's book; formatting reads only the book and the segments.
-  const verses = { ...passage, reference: '', osis: '', usfm: '', segments: [{ tag: 'Verses' as const, start, end }] };
-  const reference = topos.formatPassage(verses, format) ?? passage.reference;
+  // The verses the wave's words are in, as one passage of the passage's book.
+  const verses = topos.passageFromVerses(
+    passage.bookId,
+    tokens.filter((t, i) => i === 0 || t.verse !== tokens[i - 1].verse || t.chapter !== tokens[i - 1].chapter),
+  );
+  const reference = (verses && topos.formatPassage(verses, format)) ?? passage.reference;
   const ref = translation ? `${reference} ${translation}` : reference;
   const words = tokens.map((t) => t.word);
   // Words split at a dash are shown joined again.
