@@ -146,9 +146,9 @@ function loadBook(lx: Lx, topos: Topos, t: Translation, passage: Passage, usfm: 
     book = bookText(t, usfm)
       .then((text) => {
         if (text === null) throw new Error(`The ${t.abbreviation} has no ${passage.book}.`);
-        // logoxide reads what it can of any markup, so a book it can't read has no chapters.
+        // Text with no verses isn't a book.
         const parsed = lx.LogoxideBook.parse(topos, 'usx', text);
-        if (!parsed?.chapters().length) throw new Error(`The ${t.abbreviation}’s ${passage.book} couldn’t be read.`);
+        if (!parsed) throw new Error(`The ${t.abbreviation}’s ${passage.book} couldn’t be read.`);
         return parsed;
       });
     // A failed fetch can be tried again.
@@ -190,20 +190,17 @@ export async function readBookFiles(files: File[]): Promise<{ books: BookFile[];
 
   const lib = () => (converter ??= lx.Logoxide.new());
 
-  /** Read one file: one of the 66 books ('book', even if it couldn't be read), another book, or not a book. */
-  const read = (name: string, text: string): 'book' | 'other' | 'none' => {
+  /** Read one file: one of the 66 books, another book, or not a book. */
+  const read = (text: string): 'book' | 'other' | 'none' => {
     text = text.replace(/^\uFEFF/, '');
     if (/^\s*\\id\s/.test(text)) text = lib().usfmToUsx(text);
+    // A license or a stylesheet has no verses, so it isn't a book; Tobit is, but not one of the 66.
     const book = lx.LogoxideBook.parse(topos, 'usx', text);
-    const id = book?.bookId();
+    if (!book) return 'none';
+    const id = book.bookId();
     const info = id == null ? undefined : bible.get(id);
-    // A book that isn't one of the 66 (Tobit) still has chapters; a license or a stylesheet doesn't.
-    if (!book || !info) return book?.chapters().length ? 'other' : 'none';
+    if (!info) return 'other';
     const has = new Set(book.chapters());
-    if (!has.size) {
-      problems.push(`${name} couldn’t be read.`);
-      return 'book';
-    }
     const missing = Array.from({ length: info.chapters }, (_, i) => i + 1).filter((c) => !has.has(c));
     found.set(info.usfm.toUpperCase(), { usfm: info.usfm.toLowerCase(), usx: text, missing });
     return 'book';
@@ -213,7 +210,7 @@ export async function readBookFiles(files: File[]): Promise<{ books: BookFile[];
     try {
       const bytes = new Uint8Array(await file.arrayBuffer());
       if (!isZip(bytes)) {
-        const kind = read(file.name, new TextDecoder().decode(bytes));
+        const kind = read(new TextDecoder().decode(bytes));
         if (kind === 'none') problems.push(`${file.name} isn’t a USX or USFM book.`);
         if (kind === 'other') problems.push(`${file.name} isn’t one of the 66 books.`);
         continue;
@@ -223,7 +220,7 @@ export async function readBookFiles(files: File[]): Promise<{ books: BookFile[];
       for (const f of lib().unzip(bytes)) {
         // A zip's license, metadata and stylesheets aren't books, and aren't worth a word.
         if (!/\.(usx|xml|usfm|sfm|txt)$/i.test(f.path) || f.path.includes('__MACOSX/')) continue;
-        const kind = read(`${file.name}: ${f.path}`, new TextDecoder().decode(f.bytes));
+        const kind = read(new TextDecoder().decode(f.bytes));
         if (kind === 'book') books++;
         // The deuterocanon is left out, and front matter and glossaries (with no chapters) aren't counted.
         if (kind === 'other') others++;
