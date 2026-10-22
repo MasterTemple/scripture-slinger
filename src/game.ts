@@ -23,6 +23,7 @@ export type MistakeRule = 'continue' | 'restart' | 'release';
 export type ReleaseKey = 'off' | 'Space' | 'Tab' | 'Backspace';
 /** 'faster': enemies speed up quickly. 'swarm': gentler speed-up, more enemies to make up for it. */
 export type Progression = 'faster' | 'swarm';
+export type BannerVerse = 'wave' | 'random';
 
 export interface GameSettings {
   /** 1–20; enemies still speed up each wave from here. */
@@ -42,6 +43,8 @@ export interface GameSettings {
   shofarRefund: boolean;
   /** In a passage, only the next word in reading order can be locked onto; another letter is a miss. */
   nextWordOnly: boolean;
+  /** Whether a wave's banner shows the verse it's from, or a random one. */
+  bannerVerse: BannerVerse;
 }
 
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -55,6 +58,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   wpmGap: 0,
   shofarRefund: true,
   nextWordOnly: false,
+  bannerVerse: 'wave',
 };
 
 type State = 'menu' | 'playing' | 'paused' | 'over';
@@ -260,8 +264,8 @@ export class Game {
     this.waveSize = plan ? 0 : Math.min(Math.round(Math.min(6 + this.wave * 2, 40) * this.crowd()), 100);
     this.toSpawn = this.waveSize;
     this.spawnTimer = 0;
-    const verse = plan?.verse ?? randomVerse();
-    this.waveRef = plan ? verse.ref : null;
+    this.waveRef = plan?.verse.ref ?? null;
+    const verse = plan && this.settings.bannerVerse === 'wave' ? plan.verse : randomVerse();
     if (this.wave > 1 && (this.wave - 1) % 3 === 0 && this.shofars < MAX_SHOFARS) {
       this.shofars++;
       notes.push('+1 Shofar');

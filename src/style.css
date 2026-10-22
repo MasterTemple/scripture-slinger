@@ -471,7 +471,6 @@ button.link:focus-visible {
   color: var(--gold);
 }
 
-.passage-options.disabled,
 .toggle.disabled {
   opacity: 0.45;
 }

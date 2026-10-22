@@ -5,14 +5,14 @@
  * logoxide's WebAssembly package, which is only loaded once the player asks for
  * passages. Where the books come from is up to `./bibles`.
  */
-import type { Logoxide, LogoxideBook, Passage, Topos, ToposFormat } from 'logoxide';
+import type { BookInfo, Logoxide, LogoxideBook, Passage, Topos, ToposFormat } from 'logoxide';
 import { bookText, translations, type BookFile, type Translation } from './bibles';
-import type { Verse, WavePlan, WordSource } from './words';
+import { DefaultWordSource, type Verse, type WavePlan, type WordRequest, type WordSource } from './words';
 
 export type WaveUnit = 'verse' | 'paragraph' | 'words';
 
 export interface ScriptureSettings {
-  /** References as the player wrote them; empty means random Bible words. */
+  /** References as the player wrote them; empty means random verses from the whole Bible. */
   passages: string;
   translation: string;
   unit: WaveUnit;
@@ -137,6 +137,67 @@ export async function loadPassages(s: ScriptureSettings): Promise<PassageSource>
     groups.filter((g) => g.length),
     s,
   );
+}
+
+/** How many random waves are kept ready, so a book being downloaded doesn't hold a wave up. */
+const AHEAD = 2;
+/** Random picks tried before giving up on a translation that lacks the books picked. */
+const TRIES = 8;
+
+/** Read the chosen translation and plan waves of random verses from it. Throws with a message for the player. */
+export async function loadRandomVerses(s: ScriptureSettings): Promise<RandomVerseSource> {
+  const { lx, topos } = await logoxide();
+  const chosen = (await translations()).find((t) => t.id === s.translation);
+  if (!chosen) throw new Error('That translation isn’t installed.');
+
+  // Every verse is as likely as every other: a chapter is picked by how many verses it has.
+  const has = chosen.books && new Set(chosen.books.map((b) => b.usfm));
+  const chapters: { book: BookInfo; chapter: number; verses: number }[] = [];
+  let total = 0;
+  for (const book of topos.books()) {
+    if (has && !has.has(book.usfm.toLowerCase())) continue;
+    for (let chapter = 1; chapter <= book.chapters; chapter++) {
+      const verses = topos.verseCount(book.id, chapter) ?? 0;
+      chapters.push({ book, chapter, verses });
+      total += verses;
+    }
+  }
+  if (!total) throw new Error(`The ${chosen.abbreviation} has no books to pick verses from.`);
+
+  const format = lx.ToposFormat.create().book(lx.BookStyle.Name);
+  const pickOnce = async (): Promise<Chunk | null> => {
+    let n = Math.floor(Math.random() * total);
+    const at = chapters.find((c) => (n -= c.verses) < 0)!;
+    const verse = n + at.verses + 1;
+    const passage = topos.parse(`${at.book.usfm} ${at.chapter}`, lx.BookStyle.Usfm);
+    if (!passage) return null;
+    const book = await loadBook(lx, topos, chosen, passage, at.book.usfm);
+    const tokens = readTokens(lx, book, passage);
+    let start = tokens.findIndex((t) => t.verse >= verse);
+    if (start < 0) return null;
+    // Near a chapter's end, the words start early enough to fill the wave.
+    if (s.unit === 'words') start = Math.max(0, Math.min(start, tokens.length - s.words));
+    // A number of words starts at the verse picked; a verse or paragraph is the one it's in.
+    const wave =
+      s.unit === 'words'
+        ? tokens.slice(start, start + s.words)
+        : split(tokens, s).find((w) => w.includes(tokens[start]));
+    return wave?.length ? toChunk(topos, format, passage, null, wave) : null;
+  };
+  const pick = async (): Promise<Chunk> => {
+    let failure: unknown = null;
+    for (let i = 0; i < TRIES; i++) {
+      try {
+        const chunk = await pickOnce();
+        if (chunk) return chunk;
+      } catch (e) {
+        failure = e;
+      }
+    }
+    throw failure ?? new Error(`The ${chosen.abbreviation} has no text for the verses picked.`);
+  };
+
+  return new RandomVerseSource(await pick(), pick);
 }
 
 function loadBook(lx: Lx, topos: Topos, t: Translation, passage: Passage, usfm: string): Promise<LogoxideBook> {
@@ -391,5 +452,45 @@ export class PassageSource implements WordSource {
     const chunk = this.order[this.index++];
     // A giant wave is the giant alone, carrying all of its words.
     return { verse: chunk.verse, words: chunk.words.map((text) => ({ text, giant: boss })) };
+  }
+}
+
+/**
+ * Waves of random verses, picked ahead of time. If none is ready when a wave begins (its book is
+ * still downloading), that wave is random Bible words instead.
+ */
+export class RandomVerseSource implements WordSource {
+  private ready: Chunk[];
+  private picking = 0;
+  private readonly words = new DefaultWordSource();
+
+  constructor(
+    first: Chunk,
+    private readonly pick: () => Promise<Chunk>,
+  ) {
+    this.ready = [first];
+    this.fill();
+  }
+
+  private fill() {
+    while (this.ready.length + this.picking < AHEAD) {
+      this.picking++;
+      this.pick()
+        .then((c) => this.ready.push(c))
+        // A pick that fails is tried again at the next wave.
+        .catch(() => {})
+        .finally(() => this.picking--);
+    }
+  }
+
+  startWave(boss: boolean): WavePlan | null {
+    const chunk = this.ready.shift();
+    this.fill();
+    if (!chunk) return null;
+    return { verse: chunk.verse, words: chunk.words.map((text) => ({ text, giant: boss })) };
+  }
+
+  next(req: WordRequest): string | null {
+    return this.words.next(req);
   }
 }

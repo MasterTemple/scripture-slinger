@@ -18,6 +18,7 @@ import {
   type GameStats,
   type MistakeRule,
   type Progression,
+  type BannerVerse,
   type ReleaseKey,
 } from './game';
 import {
@@ -27,6 +28,7 @@ import {
   bookNames,
   forgetBooks,
   loadPassages,
+  loadRandomVerses,
   readBookFiles,
   type ScriptureSettings,
   type WaveUnit,
@@ -64,16 +66,17 @@ const progression = $<HTMLSelectElement>('progression');
 const wpmGap = $<HTMLSelectElement>('wpmGap');
 const shofarRefund = $<HTMLInputElement>('shofarRefund');
 const nextWordOnly = $<HTMLInputElement>('nextWordOnly');
+const bannerVerse = $<HTMLSelectElement>('bannerVerse');
 const muteBtn = $<HTMLButtonElement>('mute');
 const startBtn = $<HTMLButtonElement>('start');
 const passages = $<HTMLTextAreaElement>('passages');
 const passageStatus = $('passageStatus');
-const passageOptions = $('passageOptions');
 const translation = $<HTMLSelectElement>('translation');
 const unit = $<HTMLSelectElement>('unit');
 const unitWords = $<HTMLInputElement>('unitWords');
 const unitWordsRow = $('unitWordsRow');
 const order = $<HTMLSelectElement>('order');
+const orderRow = $('orderRow');
 const keepTogether = $<HTMLInputElement>('keepTogether');
 const keepTogetherRow = $('keepTogetherRow');
 const best = $('best');
@@ -152,6 +155,7 @@ function readSettings(): GameSettings {
     wpmGap: Number(wpmGap.value),
     shofarRefund: shofarRefund.checked,
     nextWordOnly: nextWordOnly.checked,
+    bannerVerse: bannerVerse.value as BannerVerse,
   };
 }
 
@@ -166,8 +170,10 @@ function applySettings(s: GameSettings) {
   wpmGap.value = String(s.wpmGap);
   shofarRefund.checked = s.shofarRefund;
   nextWordOnly.checked = s.nextWordOnly;
+  bannerVerse.value = s.bannerVerse;
   // An unknown saved value leaves a select blank; fall back to the default.
   if (!wpmGap.value) wpmGap.value = String(DEFAULT_SETTINGS.wpmGap);
+  if (!bannerVerse.value) bannerVerse.value = DEFAULT_SETTINGS.bannerVerse;
 }
 
 function loadSettings(): GameSettings {
@@ -210,11 +216,12 @@ function loadScripture(): ScriptureSettings {
 }
 
 function syncScriptureUi() {
-  const none = !passages.value.trim();
-  passageOptions.classList.toggle('disabled', none);
-  for (const el of [translation, unit, unitWords, order, nextWordOnly]) el.disabled = none;
+  // With no passages named, waves are random verses, which come in no order.
+  const random = !passages.value.trim();
+  order.disabled = random;
+  orderRow.classList.toggle('disabled', random);
   unitWordsRow.classList.toggle('hidden', unit.value !== 'words');
-  const together = none || order.value !== 'shuffled';
+  const together = random || order.value !== 'shuffled';
   keepTogether.disabled = together;
   keepTogetherRow.classList.toggle('disabled', together);
 }
@@ -258,24 +265,22 @@ let starting = false;
 async function start() {
   if (starting) return;
   const scripture = readScripture();
-  let source: WordSource | undefined;
-  if (scripture.passages.trim()) {
-    starting = true;
-    startBtn.disabled = true;
-    startBtn.textContent = 'Unrolling the scroll…';
-    try {
-      source = await loadPassages(scripture);
-    } catch (e) {
-      setStatus(errorText(e), true);
-      refreshMenu();
-      show(menu);
-      passages.focus();
-      return;
-    } finally {
-      starting = false;
-      startBtn.disabled = false;
-      startBtn.textContent = 'Begin';
-    }
+  let source: WordSource;
+  starting = true;
+  startBtn.disabled = true;
+  startBtn.textContent = 'Unrolling the scroll…';
+  try {
+    source = scripture.passages.trim() ? await loadPassages(scripture) : await loadRandomVerses(scripture);
+  } catch (e) {
+    setStatus(errorText(e), true);
+    refreshMenu();
+    show(menu);
+    passages.focus();
+    return;
+  } finally {
+    starting = false;
+    startBtn.disabled = false;
+    startBtn.textContent = 'Begin';
   }
   show(null);
   game.start(readSettings(), source);
@@ -537,6 +542,7 @@ for (const el of [
   punct,
   shofarRefund,
   nextWordOnly,
+  bannerVerse,
   mistake,
   releaseKey,
   releaseMode,

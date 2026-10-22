@@ -37,7 +37,7 @@ Every push to `main` is built and published to GitHub Pages by `.github/workflow
 
 ## Typing passages
 
-Name passages in the menu's **Scripture** box (`John 1:1-14; Psalm 23; Romans 8:28-39`, or any text with references in it) and the waves walk through their words in reading order. It starts with Hebrews 1; leave it empty for random Bible words. A reference followed by a translation's abbreviation (`John 3:16 KJV`) is read in that translation rather than the chosen one; one the game doesn't have (`John 3:16 ESV`) is shown as not a reference.
+Name passages in the menu's **Scripture** box (`John 1:1-14; Psalm 23; Romans 8:28-39`, or any text with references in it) and the waves walk through their words in reading order. It starts with Hebrews 1; leave it empty and each wave is a random verse (or paragraph, or run of words, as **Each wave is** says) from the chosen translation. **Wave banner shows** chooses whether each wave opens with the verse it's from or a random one. A reference followed by a translation's abbreviation (`John 3:16 KJV`) is read in that translation rather than the chosen one; one the game doesn't have (`John 3:16 ESV`) is shown as not a reference.
 
 - Every creature takes the same time to reach David, so they arrive in reading order: defeating whatever is closest types the passage in order.
 - If you know the verse, type ahead: a letter no enemy on screen is waiting for, but that starts the passage's next word, brings that word in at once (no miss), moving slower so it reaches David no sooner than it would have. Knowing the verse buys you time. A space between words is never a miss.

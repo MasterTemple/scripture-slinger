@@ -45,10 +45,10 @@
                 rows="2"
                 spellcheck="false"
                 aria-describedby="passageStatus"
-                placeholder="Leave empty for random Bible words, or name passages: John 1:1-14; Psalm 23; Romans 8:28-39"
+                placeholder="Leave empty for random verses, or name passages: John 1:1-14; Psalm 23; Romans 8:28-39"
               ></textarea>
               <p id="passageStatus" class="status" aria-live="polite"></p>
-              <div class="passage-options" id="passageOptions">
+              <div class="passage-options">
                 <div class="row">
                   <label for="translation">Translation</label>
                   <span class="picker">
@@ -68,11 +68,18 @@
                   <label for="unitWords">Words per wave</label>
                   <input type="number" id="unitWords" min="3" max="200" step="1" />
                 </div>
-                <div class="row">
+                <div class="row" id="orderRow">
                   <label for="order">Passages come</label>
                   <select id="order">
                     <option value="ordered">In the order given</option>
                     <option value="shuffled">Shuffled</option>
+                  </select>
+                </div>
+                <div class="row">
+                  <label for="bannerVerse">Wave banner shows</label>
+                  <select id="bannerVerse">
+                    <option value="wave">The wave’s verse</option>
+                    <option value="random">A random verse</option>
                   </select>
                 </div>
                 <label class="toggle">
