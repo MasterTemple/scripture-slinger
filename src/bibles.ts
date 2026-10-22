@@ -177,9 +177,17 @@ async function saveIndex(list: LocalTranslation[]) {
   await cache.put(INDEX, Response.json(list));
 }
 
-/** The id of the player's own translation with this abbreviation. */
+/**
+ * An abbreviation as compared with others, and the id a translation first added under it gets.
+ * The id stays when the translation is renamed, since its books are kept under it.
+ */
 export function localId(abbreviation: string): string {
   return `my-${abbreviation.trim().toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-')}`;
+}
+
+/** The player's own translation with this abbreviation (letter case and punctuation aside). */
+function withAbbreviation(index: LocalTranslation[], abbreviation: string): LocalTranslation | undefined {
+  return index.find((t) => localId(t.abbreviation) === localId(abbreviation));
 }
 
 /**
@@ -189,13 +197,16 @@ export function localId(abbreviation: string): string {
 export async function saveLocalBooks(abbreviation: string, name: string, books: BookFile[]): Promise<Translation> {
   const cache = await openCache();
   if (!cache) throw new Error('This browser can’t keep files for the game.');
-  const id = localId(abbreviation);
   const index = await localIndex();
-  const existing = index.find((t) => t.id === id);
+  const existing = withAbbreviation(index, abbreviation);
+  // A translation renamed away from this abbreviation keeps the id it had, so a new one may need another.
+  let id = existing?.id ?? localId(abbreviation);
+  for (let n = 2; !existing && index.some((t) => t.id === id); n++) id = `${localId(abbreviation)}-${n}`;
   const added = new Set(books.map((b) => b.usfm));
   const entry: LocalTranslation = {
     id,
-    abbreviation: abbreviation.trim(),
+    // Renaming is what changes an abbreviation; adding books keeps it as it was written.
+    abbreviation: existing?.abbreviation ?? abbreviation.trim(),
     name: name.trim() || existing?.name || abbreviation.trim(),
     books: [
       ...(existing?.books ?? []).filter((b) => !added.has(b.usfm)),
@@ -211,4 +222,17 @@ export async function saveLocalBooks(abbreviation: string, name: string, books: 
   // Ask the browser not to clear them when space runs low; it may say no.
   void navigator.storage?.persist?.().catch(() => {});
   return t;
+}
+
+/** Give the player's own translation `id` another abbreviation and name; its books stay as they are. */
+export async function renameLocal(id: string, abbreviation: string, name: string): Promise<Translation> {
+  const index = await localIndex();
+  const entry = index.find((t) => t.id === id);
+  if (!entry) throw new Error('That translation isn’t in this browser anymore.');
+  if (!abbreviation.trim()) throw new Error('It needs an abbreviation.');
+  const taken = withAbbreviation(index, abbreviation);
+  if (taken && taken.id !== id) throw new Error(`Your ${taken.abbreviation} has that abbreviation already.`);
+  const renamed: LocalTranslation = { ...entry, abbreviation: abbreviation.trim(), name: name.trim() || abbreviation.trim() };
+  await saveIndex(index.map((t) => (t.id === id ? renamed : t)));
+  return toTranslation(renamed);
 }

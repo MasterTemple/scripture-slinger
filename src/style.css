@@ -582,6 +582,44 @@ button.link:focus-visible {
   white-space: nowrap;
 }
 
+.bible-list li > span {
+  flex: 1;
+}
+
+.bible-list .rename {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.bible-list .rename input[type="text"] {
+  width: 6em;
+}
+
+.bible-list .rename input[type="text"] + input[type="text"] {
+  flex: 1;
+  min-width: 10em;
+  width: auto;
+}
+
+.bible-list .rename .primary {
+  width: auto;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 0.95rem;
+}
+
+.bible-list .rename .status {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.bible-list .rename .status:empty {
+  display: none;
+}
+
 @media (max-width: 480px) {
   .picker,
   .library input[type="text"],

@@ -5,6 +5,7 @@ import {
   forget,
   keptBooks,
   localId,
+  renameLocal,
   saveLocalBooks,
   translations,
   type BookFile,
@@ -375,7 +376,7 @@ function describeBooks(books: StoredBook[], names: Map<string, string>): string 
 /** The player's own translation that books added under `abbreviation` would go into. */
 async function localTranslation(abbreviation: string): Promise<Translation | undefined> {
   const id = localId(abbreviation);
-  return (await translations()).find((t) => t.local && t.id === id);
+  return (await translations()).find((t) => t.local && localId(t.abbreviation) === id);
 }
 
 /** Books as they'd be with `added` put into `t`. */
@@ -440,6 +441,14 @@ async function fillLibrary() {
           : 'Installed on this site';
       label.append(title, ` ${t.name}`, detail);
       li.append(label);
+      if (t.local) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'link';
+        btn.textContent = 'Rename';
+        btn.addEventListener('click', () => li.replaceChildren(renameForm(t)));
+        li.append(btn);
+      }
       if (t.local || kept.length) {
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -458,6 +467,55 @@ async function fillLibrary() {
   );
   bibleList.replaceChildren(...items);
   myBibles.replaceChildren(...list.filter((t) => t.local).map((t) => new Option(t.name, t.abbreviation)));
+}
+
+/** A form in place of the player's own translation in the list, to give it another abbreviation and name. */
+function renameForm(t: Translation): HTMLFormElement {
+  const form = document.createElement('form');
+  form.className = 'rename';
+  const abbreviation = document.createElement('input');
+  abbreviation.type = 'text';
+  abbreviation.value = t.abbreviation;
+  abbreviation.maxLength = 16;
+  abbreviation.required = true;
+  abbreviation.ariaLabel = 'Abbreviation';
+  const name = document.createElement('input');
+  name.type = 'text';
+  name.value = t.name;
+  name.maxLength = 80;
+  name.ariaLabel = 'Name';
+  const save = document.createElement('button');
+  save.className = 'primary';
+  save.textContent = 'Save';
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'link';
+  cancel.textContent = 'Cancel';
+  cancel.addEventListener('click', () => void fillLibrary());
+  const status = document.createElement('p');
+  status.className = 'status error';
+  status.ariaLive = 'polite';
+  form.append(abbreviation, name, save, cancel, status);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    save.disabled = true;
+    try {
+      await renameLocal(t.id, abbreviation.value, name.value);
+      await refreshTranslations();
+      previewPassages();
+    } catch (err) {
+      status.textContent = errorText(err);
+      save.disabled = false;
+    }
+  });
+  form.addEventListener('keydown', (e) => {
+    // Escape leaves the renaming, not the whole list.
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    void fillLibrary();
+  });
+  queueMicrotask(() => abbreviation.select());
+  return form;
 }
 
 async function refreshTranslations(selected = translation.value) {

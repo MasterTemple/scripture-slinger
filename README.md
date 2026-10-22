@@ -59,7 +59,7 @@ Each translation is a folder of USX files, one per book, named by its lowercase 
   [{ "id": "esv", "name": "English Standard Version", "abbreviation": "ESV" }]
   ```
 
-- **A player's own:** USX or USFM files (one per book), or zips of them (eBible.org's `<id>_usfm.zip`, a Digital Bible Library bundle's USX), added under **Manage**. logoxide unzips them, converts USFM to USX and reads each book, and the panel says whether all 66 books are there with every chapter (and if not, which are missing) before they're added. They're kept only in that browser's Cache Storage. Adding books under an abbreviation that's already been used adds them to that translation.
+- **A player's own:** USX or USFM files (one per book), or zips of them (eBible.org's `<id>_usfm.zip`, a Digital Bible Library bundle's USX), added under **Manage**. logoxide unzips them, converts USFM to USX and reads each book, and the panel says whether all 66 books are there with every chapter (and if not, which are missing) before they're added. They're kept only in that browser's Cache Storage. Adding books under an abbreviation that's already been used adds them to that translation, and **Rename** gives one another abbreviation and name. Its books are kept under the id it was first given, so renaming moves nothing, and a new translation under its old abbreviation gets an id of its own.
 
 Cache Storage only exists on https and `localhost`. Without it, the BSB is downloaded again each session and players can't add their own translations.
 
